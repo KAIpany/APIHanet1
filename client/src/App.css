@@ -10,8 +10,12 @@
 /* Navigation */
 .app-nav {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
 }
 
 .config-button {
@@ -333,52 +337,16 @@ textarea:focus {
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.3);
 }
 
-.home-container {
-  max-width: 800px;
-  margin: 2rem auto;
-  padding: 2rem;
-}
-
-.auth-success {
-  background-color: #f8f9fa;
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
-  padding: 2rem;
-  text-align: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.auth-success h2 {
-  color: #28a745;
-  margin-bottom: 1rem;
-}
-
-.auth-success p {
-  color: #6c757d;
-  margin-bottom: 1.5rem;
-}
-
-.loading {
+.user-info {
   display: flex;
-  justify-content: center;
   align-items: center;
-  height: 100vh;
-  font-size: 1.2rem;
-  color: #6c757d;
+  margin-right: auto;
+  padding: 8px 16px;
+  color: #333;
+  font-weight: 500;
 }
 
-.loading-spinner {
-  display: inline-block;
-  width: 2rem;
-  height: 2rem;
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #3498db;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-right: 1rem;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.welcome-text {
+  font-size: 16px;
+  color: #2c3e50;
 }

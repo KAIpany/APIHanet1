@@ -177,18 +177,9 @@ app.get("/api/checkins", validateCheckinParams, async (req, res, next) => {
 // API cấu hình OAuth
 app.post("/api/oauth/config", (req, res) => {
   try {
-    console.log('[OAuth Config] Nhận yêu cầu cập nhật cấu hình:', {
-      clientId: req.body.clientId ? '***' : 'không có',
-      hasClientSecret: !!req.body.clientSecret,
-      hasRefreshToken: !!req.body.refreshToken,
-      baseUrl: req.body.baseUrl,
-      tokenUrl: req.body.tokenUrl
-    });
-
     const { clientId, clientSecret, refreshToken, baseUrl, tokenUrl } = req.body;
     
     if (!clientId || !clientSecret) {
-      console.log('[OAuth Config] Thiếu thông tin bắt buộc');
       return res.status(400).json({
         success: false,
         message: "Cần cung cấp Client ID và Client Secret",
@@ -202,18 +193,15 @@ app.post("/api/oauth/config", (req, res) => {
       baseUrl: baseUrl || "https://partner.hanet.ai",
       tokenUrl: tokenUrl || "https://oauth.hanet.com/token"
     };
-
-    console.log('[OAuth Config] Đang cập nhật cấu hình với tokenManager...');
-    const result = tokenManager.setDynamicConfig(config);
-    console.log('[OAuth Config] Kết quả cập nhật:', result);
+    
+    tokenManager.setDynamicConfig(config);
     
     return res.status(200).json({
       success: true,
       message: "Cấu hình OAuth đã được cập nhật",
     });
   } catch (error) {
-    console.error("[OAuth Config] Lỗi chi tiết:", error);
-    console.error("[OAuth Config] Stack trace:", error.stack);
+    console.error("Lỗi khi cập nhật cấu hình OAuth:", error);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi cập nhật cấu hình: " + error.message,
@@ -311,6 +299,40 @@ app.get("/api/oauth/status", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Lỗi kiểm tra trạng thái: " + error.message,
+    });
+  }
+});
+
+// API lấy thông tin người dùng
+app.get("/api/user/info", async (req, res) => {
+  try {
+    const token = await tokenManager.getValidHanetToken();
+    const config = tokenManager.getCurrentConfig();
+    
+    const response = await fetch(`${config.baseUrl}/api/v3/account/info`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    const userData = await response.json();
+    
+    if (userData.code === '1' && userData.data) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          username: userData.data.username,
+          name: userData.data.name || userData.data.username,
+          email: userData.data.email
+        }
+      });
+    } else {
+      throw new Error('Không thể lấy thông tin người dùng');
+    }
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy thông tin người dùng: " + error.message
     });
   }
 });

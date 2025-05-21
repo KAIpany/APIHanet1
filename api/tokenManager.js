@@ -15,44 +15,18 @@ let dynamicConfig = null;
 
 // Thiết lập cấu hình động từ client
 function setDynamicConfig(config) {
-  try {
-    console.log('[TokenManager] Đang thiết lập cấu hình mới:', {
-      hasClientId: !!config.clientId,
-      hasClientSecret: !!config.clientSecret,
-      hasRefreshToken: !!config.refreshToken,
-      baseUrl: config.baseUrl,
-      tokenUrl: config.tokenUrl
-    });
-
-    if (!config.clientId || !config.clientSecret) {
-      throw new Error('Thiếu thông tin Client ID hoặc Client Secret');
-    }
-
-    dynamicConfig = {
-      clientId: config.clientId,
-      clientSecret: config.clientSecret,
-      baseUrl: config.baseUrl || "https://partner.hanet.ai",
-      tokenUrl: config.tokenUrl || "https://oauth.hanet.com/token"
-    };
-    
-    // Cập nhật token từ cấu hình
-    if (config.refreshToken) {
-      console.log('[TokenManager] Cập nhật refresh token mới');
-      cachedTokenData.refreshToken = config.refreshToken;
-    }
-    
-    // Reset access token để buộc refresh lại
-    console.log('[TokenManager] Reset access token');
-    cachedTokenData.accessToken = null;
-    cachedTokenData.expiresAt = null;
-    
-    console.log('[TokenManager] Cấu hình đã được cập nhật thành công');
-    return true;
-  } catch (error) {
-    console.error('[TokenManager] Lỗi khi thiết lập cấu hình:', error);
-    console.error('[TokenManager] Stack trace:', error.stack);
-    throw error; // Ném lỗi để server có thể xử lý
+  dynamicConfig = config;
+  
+  // Cập nhật token từ cấu hình
+  if (config.refreshToken) {
+    cachedTokenData.refreshToken = config.refreshToken;
   }
+  
+  // Reset access token để buộc refresh lại
+  cachedTokenData.accessToken = null;
+  cachedTokenData.expiresAt = null;
+  
+  return true;
 }
 
 // Lấy cấu hình hiện tại
