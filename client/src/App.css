@@ -677,3 +677,58 @@ textarea:focus {
   border-radius: 6px;
   font-style: italic;
 }
+
+/* Nút di chuyển tài khoản */
+.migrate-button {
+  background-color: #8e44ad;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.migrate-button:hover {
+  background-color: #7d3c98;
+}
+
+/* Hiển thị thông tin tài khoản */
+.accounts-summary {
+  margin-bottom: 30px;
+}
+
+.accounts-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.account-column {
+  flex: 1;
+  min-width: 300px;
+  background-color: #f9f9f9;
+  padding: 15px;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.account-column h3 {
+  margin-top: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+  font-size: 16px;
+  color: #333;
+}
+
+.accounts-data {
+  background-color: #fff;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 10px;
+  max-height: 300px;
+  overflow: auto;
+  font-size: 12px;
+}

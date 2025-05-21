@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { saveAccount } from './accountManager';
+import { saveAccount } from './directAccountManager';
 import './OAuthCallback.css';
 
-// Các khóa localStorage
-const ACCOUNTS_KEY = 'hanet_accounts';
-const CURRENT_ACCOUNT_KEY = 'hanet_current_account_id';
+// Các khóa localStorage (cho lưu trực tiếp)
 const USER_INFO_KEY = 'user_info'; 
 const CONFIG_KEY = 'hanet_oauth_config';
 
@@ -27,66 +25,6 @@ const OAuthCallback = () => {
       return value === 'test';
     } catch (e) {
       console.error('Lỗi localStorage:', e);
-      return false;
-    }
-  };
-
-  // Hàm lưu tài khoản trực tiếp (không phụ thuộc vào accountManager)
-  const saveAccountDirectly = (userInfo, oauthConfig) => {
-    try {
-      console.log('Đang lưu tài khoản trực tiếp:', userInfo.username);
-      
-      // Tạo ID tài khoản từ username
-      const accountId = userInfo.username;
-      
-      // Lấy danh sách tài khoản hiện tại
-      let accounts = [];
-      try {
-        const savedAccounts = localStorage.getItem(ACCOUNTS_KEY);
-        console.log('Danh sách tài khoản hiện tại:', savedAccounts);
-        accounts = savedAccounts ? JSON.parse(savedAccounts) : [];
-      } catch (error) {
-        console.error('Lỗi khi đọc danh sách tài khoản:', error);
-        accounts = [];
-      }
-      
-      // Tạo dữ liệu tài khoản mới
-      const accountData = {
-        id: accountId,
-        name: userInfo.name || userInfo.username,
-        email: userInfo.email,
-        config: oauthConfig,
-        userInfo: userInfo,
-        lastUpdated: new Date().toISOString()
-      };
-      
-      // Kiểm tra xem tài khoản đã tồn tại chưa
-      const existingIndex = accounts.findIndex(acc => acc && acc.id === accountId);
-      
-      if (existingIndex >= 0) {
-        // Cập nhật tài khoản hiện có
-        accounts[existingIndex] = accountData;
-        console.log('Đã cập nhật tài khoản:', accountId);
-      } else {
-        // Thêm tài khoản mới
-        accounts.push(accountData);
-        console.log('Đã thêm tài khoản mới:', accountId);
-      }
-      
-      // Lưu danh sách tài khoản
-      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-      console.log('Đã lưu danh sách tài khoản:', accounts);
-      
-      // Đặt làm tài khoản hiện tại
-      localStorage.setItem(CURRENT_ACCOUNT_KEY, accountId);
-      
-      // Lưu thông tin người dùng và cấu hình hiện tại (tương thích ngược)
-      localStorage.setItem(USER_INFO_KEY, JSON.stringify(userInfo));
-      localStorage.setItem(CONFIG_KEY, JSON.stringify(oauthConfig));
-      
-      return true;
-    } catch (error) {
-      console.error('Lỗi khi lưu tài khoản trực tiếp:', error);
       return false;
     }
   };
@@ -132,28 +70,15 @@ const OAuthCallback = () => {
               const currentConfig = result.data || {};
               console.log('Cấu hình OAuth hiện tại:', currentConfig);
               
-              // Lưu tài khoản trực tiếp
-              const saveResult = saveAccountDirectly(userData.data, currentConfig);
-              console.log('Kết quả lưu tài khoản trực tiếp:', saveResult);
+              // Lưu tài khoản qua module mới
+              const saveResult = saveAccount(userData.data, currentConfig);
+              console.log('Kết quả lưu tài khoản (directAccountManager):', saveResult);
               
-              // Sau đó thử sử dụng accountManager
-              const managerResult = saveAccount(userData.data, currentConfig);
-              console.log('Kết quả lưu tài khoản qua accountManager:', managerResult);
+              // Vẫn lưu cả thông tin cơ bản cho tương thích ngược
+              localStorage.setItem(USER_INFO_KEY, JSON.stringify(userData.data));
+              localStorage.setItem(CONFIG_KEY, JSON.stringify(currentConfig));
               
-              // Tạm thời hiển thị danh sách tài khoản trong console
-              const storedAccounts = localStorage.getItem(ACCOUNTS_KEY);
-              console.log('Danh sách tài khoản trong storage:', storedAccounts);
-              
-              // Kiểm tra xem đã lưu thành công chưa
-              const testUserInfo = localStorage.getItem('user_info');
-              const testConfig = localStorage.getItem(CONFIG_KEY);
-              const testAccounts = localStorage.getItem(ACCOUNTS_KEY);
-              if (!testUserInfo || !testConfig) {
-                throw new Error('Không thể lưu thông tin user_info hoặc oauth_config vào localStorage');
-              }
-              if (!testAccounts) {
-                console.warn('Không thể lưu danh sách tài khoản, nhưng user_info và oauth_config đã lưu thành công');
-              }
+              console.log('Đã lưu tài khoản:', userData.data.username);
             } catch (storageError) {
               console.error('Lỗi khi lưu thông tin:', storageError);
               setStatus({
