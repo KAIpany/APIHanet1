@@ -990,9 +990,94 @@ const CheckInApp = () => {
               Làm mới dữ liệu
             </button>
           </div>
+          
+          {/* Thêm nút tạo tài khoản mới */}
+          <div className="add-account-section">
+            <Link to="/config" className="add-account-button" onClick={() => setShowAccountMenu(false)}>
+              + Thêm tài khoản mới (Đăng nhập)
+            </Link>
+            <button 
+              className="create-manual-account-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                createManualAccount();
+              }}
+            >
+              + Tạo tài khoản thủ công
+            </button>
+          </div>
         </div>
       </div>
     );
+  };
+  
+  // Tạo tài khoản thủ công
+  const createManualAccount = () => {
+    try {
+      // Đóng menu
+      setShowAccountMenu(false);
+      
+      // Yêu cầu thông tin tài khoản
+      const accountName = prompt('Nhập tên tài khoản:');
+      if (!accountName) return;
+      
+      // Tạo ID ngẫu nhiên
+      const accountId = 'manual_user_' + Date.now();
+      
+      // Tạo tài khoản mới
+      const newAccount = {
+        id: accountId,
+        name: accountName,
+        createdAt: new Date().toISOString()
+      };
+      
+      // Lấy danh sách tài khoản hiện tại
+      let currentAccounts = [...accounts];
+      if (!Array.isArray(currentAccounts)) {
+        currentAccounts = [];
+      }
+      
+      // Thêm tài khoản mới
+      currentAccounts.push(newAccount);
+      
+      // Lưu danh sách tài khoản
+      const accountsJSON = JSON.stringify(currentAccounts);
+      localStorage.setItem('hanet_accounts_direct', accountsJSON);
+      localStorage.setItem('hanet_accounts_v2', accountsJSON);
+      localStorage.setItem('hanet_accounts', accountsJSON);
+      
+      // Cập nhật state
+      setAccounts(currentAccounts);
+      
+      // Hỏi người dùng có muốn chuyển sang tài khoản mới không
+      if (window.confirm(`Đã tạo tài khoản "${accountName}". Bạn có muốn chuyển sang tài khoản này không?`)) {
+        // Tạo thông tin người dùng đơn giản
+        const simpleUserInfo = {
+          username: accountId,
+          name: accountName
+        };
+        
+        // Lưu user_info
+        localStorage.setItem('user_info', JSON.stringify(simpleUserInfo));
+        
+        // Cập nhật ID tài khoản hiện tại
+        localStorage.setItem('hanet_current_account_direct', accountId);
+        localStorage.setItem('hanet_current_account_id_v2', accountId);
+        localStorage.setItem('hanet_current_account_id', accountId);
+        
+        // Cập nhật state
+        setUserInfo(simpleUserInfo);
+        
+        // Làm mới trang
+        window.location.reload();
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Lỗi khi tạo tài khoản thủ công:', error);
+      alert('Không thể tạo tài khoản: ' + error.message);
+      return false;
+    }
   };
 
   // Render main application

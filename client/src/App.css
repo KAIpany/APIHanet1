@@ -877,3 +877,48 @@ textarea:focus {
 .create-account-button:hover {
   background-color: #004c99;
 }
+
+/* CSS cho phần tạo tài khoản mới */
+.add-account-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.add-account-button {
+  display: block;
+  text-align: center;
+  color: #0066cc;
+  text-decoration: none;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 4px;
+  background-color: #f0f7ff;
+  transition: background-color 0.2s;
+}
+
+.add-account-button:hover {
+  background-color: #d8ebff;
+  text-decoration: none;
+}
+
+.create-manual-account-button {
+  display: block;
+  width: 100%;
+  text-align: center;
+  color: #4a6782;
+  background-color: #f5f5f5;
+  border: none;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.create-manual-account-button:hover {
+  background-color: #e5e5e5;
+}
