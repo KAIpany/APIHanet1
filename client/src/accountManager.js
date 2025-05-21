@@ -519,10 +519,13 @@ export default {
   getAccounts,
   getCurrentAccount,
   getCurrentAccountId,
-  setCurrentAccount,
-  addOrUpdateAccount,
+  switchToAccount,
+  addAccount,
+  updateAccount,
   deleteAccount,
   createAccountFromOAuth,
   createManualAccount,
-  switchToAccount,
+  getOAuthConfig,
+  setOAuthConfig,
+  migrateFromOldFormat
 }; 
