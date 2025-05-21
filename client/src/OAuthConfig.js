@@ -27,9 +27,9 @@ const OAuthConfig = () => {
         setConfig(prevConfig => ({
           ...prevConfig,
           ...parsedConfig,
-          // Không hiển thị thông tin nhạy cảm
-          clientSecret: '',
-          refreshToken: ''
+          // Vẫn hiển thị thông tin nhạy cảm từ localStorage
+          clientSecret: parsedConfig.clientSecret || '',
+          refreshToken: parsedConfig.refreshToken || ''
         }));
       } catch (error) {
         console.error('Lỗi khi đọc cấu hình từ local storage:', error);
@@ -46,21 +46,19 @@ const OAuthConfig = () => {
       const result = await response.json();
       
       if (result.success && result.data) {
+        // Lấy giá trị từ localStorage hoặc API response
+        const savedConfig = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        
         const newConfig = {
           clientId: result.data.clientId || '',
-          clientSecret: '',  // Không hiển thị client secret từ server
-          refreshToken: '',  // Không hiển thị refresh token từ server
+          // Ưu tiên giá trị từ localStorage
+          clientSecret: savedConfig.clientSecret || '',
+          refreshToken: savedConfig.refreshToken || '',
           baseUrl: result.data.baseUrl || 'https://partner.hanet.ai',
           tokenUrl: result.data.tokenUrl || 'https://oauth.hanet.com/token'
         };
         
         setConfig(newConfig);
-        // Lưu vào local storage
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          clientId: newConfig.clientId,
-          baseUrl: newConfig.baseUrl,
-          tokenUrl: newConfig.tokenUrl
-        }));
         
         setStatus({
           loading: false,
@@ -119,9 +117,11 @@ const OAuthConfig = () => {
       const result = await response.json();
       
       if (result.success) {
-        // Lưu vào local storage
+        // Lưu đầy đủ các thông tin vào local storage, bao gồm cả những thông tin nhạy cảm
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
           clientId: config.clientId,
+          clientSecret: config.clientSecret, // Lưu client secret
+          refreshToken: config.refreshToken, // Lưu refresh token
           baseUrl: config.baseUrl,
           tokenUrl: config.tokenUrl
         }));
@@ -131,13 +131,6 @@ const OAuthConfig = () => {
           message: 'Đã lưu cấu hình thành công',
           status: 'success',
           error: null
-        });
-        
-        // Xóa client secret và refresh token khỏi form sau khi lưu
-        setConfig({
-          ...config,
-          clientSecret: '',
-          refreshToken: ''
         });
         
         // Kiểm tra lại trạng thái xác thực

@@ -20,6 +20,7 @@ function setDynamicConfig(config) {
   // Cập nhật token từ cấu hình
   if (config.refreshToken) {
     cachedTokenData.refreshToken = config.refreshToken;
+    console.log('Đã cập nhật refresh token từ cấu hình client');
   }
   
   // Reset access token để buộc refresh lại
@@ -31,9 +32,11 @@ function setDynamicConfig(config) {
 
 // Lấy cấu hình hiện tại
 function getCurrentConfig() {
+  // Trả về cả refresh token để client có thể lưu nếu cần
   return dynamicConfig || {
     clientId: process.env.HANET_CLIENT_ID,
     clientSecret: process.env.HANET_CLIENT_SECRET,
+    refreshToken: cachedTokenData.refreshToken,
     baseUrl: process.env.HANET_API_BASE_URL || "https://partner.hanet.ai",
     tokenUrl: process.env.HANET_TOKEN_URL || "https://oauth.hanet.com/token"
   };
@@ -148,6 +151,7 @@ async function exchangeCodeForToken(code, redirectUri) {
       cachedTokenData.expiresAt = Date.now() + (response.data.expires_in * 1000 * 0.9);
       
       if (response.data.refresh_token) {
+        console.log(`[${new Date().toISOString()}] Đã nhận được refresh token mới.`);
         cachedTokenData.refreshToken = response.data.refresh_token;
         
         // Cập nhật cấu hình động nếu có

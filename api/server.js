@@ -247,12 +247,18 @@ app.get("/api/oauth/callback", async (req, res) => {
     
     const tokenData = await tokenManager.exchangeCodeForToken(code, redirect_uri);
     
+    console.log("[OAuth Callback] Đã nhận token data:", {
+      hasAccessToken: !!tokenData.accessToken,
+      hasRefreshToken: !!tokenData.refreshToken,
+      expiresIn: tokenData.expiresIn
+    });
+    
     return res.status(200).json({
       success: true,
       message: "Xác thực thành công",
       data: {
-        accessToken: tokenData.accessToken ? "******" : null,
-        refreshToken: tokenData.refreshToken ? "******" : null,
+        accessToken: tokenData.accessToken,
+        refreshToken: tokenData.refreshToken,
         expiresIn: tokenData.expiresIn,
       },
     });

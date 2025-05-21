@@ -52,6 +52,20 @@ const OAuthCallback = () => {
             console.error('Failed to get user data:', userData);
           }
           
+          // Lưu refresh token nếu có
+          if (result.data && result.data.refreshToken) {
+            // Lấy cấu hình hiện tại từ localStorage
+            const STORAGE_KEY = 'hanet_oauth_config';
+            const currentConfig = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            
+            // Cập nhật refresh token trong cấu hình
+            currentConfig.refreshToken = result.data.refreshToken;
+            
+            // Lưu lại vào localStorage
+            console.log('Saving updated OAuth config with refresh token to localStorage');
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(currentConfig));
+          }
+          
           setStatus({
             message: 'Xác thực thành công! Đang chuyển hướng...',
             error: null,

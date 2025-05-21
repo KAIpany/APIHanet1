@@ -252,15 +252,9 @@ const CheckInApp = () => {
   const renderMainApp = () => (
     <main className="container">
       <nav className="app-nav">
-        {userInfo ? (
-          <div className="user-info">
-            <span className="welcome-text">Xin chào, {userInfo.name || 'Người dùng'}</span>
-          </div>
-        ) : (
-          <div className="user-info">
-            <span className="welcome-text">Xin chào</span>
-          </div>
-        )}
+        <div className="user-info">
+          <span className="welcome-text">Anycross</span>
+        </div>
         <Link to="/config" className="config-button">
           Cấu hình API
         </Link>
