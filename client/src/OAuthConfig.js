@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import './OAuthConfig.css';
 
 const STORAGE_KEY = 'hanet_oauth_config';
@@ -178,7 +179,12 @@ const OAuthConfig = () => {
 
   return (
     <div className="oauth-config">
-      <h2>Cấu hình Xác thực Hanet API</h2>
+      <div className="config-header">
+        <h2>Cấu hình Xác thực Hanet API</h2>
+        <Link to="/" className="home-button">
+          Quay về trang chủ
+        </Link>
+      </div>
       
       {status.error && (
         <div className="error-message">
