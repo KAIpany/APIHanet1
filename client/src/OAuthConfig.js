@@ -10,7 +10,8 @@ const OAuthConfig = () => {
     clientSecret: '',
     refreshToken: '',
     baseUrl: 'https://partner.hanet.ai',
-    tokenUrl: 'https://oauth.hanet.com/token'
+    tokenUrl: 'https://oauth.hanet.com/token',
+    appName: ''
   });
   const [status, setStatus] = useState({
     loading: true,
@@ -33,7 +34,8 @@ const OAuthConfig = () => {
           // Đảm bảo hiển thị đầy đủ thông tin
           clientId: parsedConfig.clientId || '',
           clientSecret: parsedConfig.clientSecret || '',
-          refreshToken: parsedConfig.refreshToken || ''
+          refreshToken: parsedConfig.refreshToken || '',
+          appName: parsedConfig.appName || ''
         }));
       } catch (error) {
         console.error('Lỗi khi đọc cấu hình từ local storage:', error);
@@ -64,7 +66,8 @@ const OAuthConfig = () => {
           clientSecret: savedConfig.clientSecret || '',
           refreshToken: savedConfig.refreshToken || '',
           baseUrl: savedConfig.baseUrl || result.data.baseUrl || 'https://partner.hanet.ai',
-          tokenUrl: savedConfig.tokenUrl || result.data.tokenUrl || 'https://oauth.hanet.com/token'
+          tokenUrl: savedConfig.tokenUrl || result.data.tokenUrl || 'https://oauth.hanet.com/token',
+          appName: savedConfig.appName || result.data.appName || ''
         };
         
         console.log('Cấu hình từ localStorage:', savedConfig);
@@ -140,7 +143,8 @@ const OAuthConfig = () => {
         clientSecret: config.clientSecret,
         refreshToken: config.refreshToken,
         baseUrl: config.baseUrl,
-        tokenUrl: config.tokenUrl
+        tokenUrl: config.tokenUrl,
+        appName: config.appName
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(configToSave));
       console.log('Đã lưu cấu hình vào localStorage:', configToSave);
@@ -230,6 +234,19 @@ const OAuthConfig = () => {
       )}
       
       <div className="config-form">
+        <div className="form-group">
+          <label htmlFor="appName">Tên ứng dụng:</label>
+          <input
+            type="text"
+            id="appName"
+            name="appName"
+            value={config.appName}
+            onChange={handleChange}
+            placeholder="Nhập tên ứng dụng của bạn"
+          />
+          <small>* Tên này sẽ được hiển thị khi chọn tài khoản</small>
+        </div>
+        
         <div className="form-group">
           <label htmlFor="clientId">Client ID:</label>
           <input

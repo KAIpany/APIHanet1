@@ -428,6 +428,14 @@ const CheckInApp = () => {
         localStorage.setItem('hanet_oauth_config', JSON.stringify(account.oauthConfig));
       }
       
+      // Cập nhật tên ứng dụng hiện tại
+      if (account.appName) {
+        console.log('Cập nhật tên ứng dụng:', account.appName);
+        const oauthConfig = JSON.parse(localStorage.getItem('hanet_oauth_config') || '{}');
+        oauthConfig.appName = account.appName;
+        localStorage.setItem('hanet_oauth_config', JSON.stringify(oauthConfig));
+      }
+      
       // Lưu ID tài khoản hiện tại
       console.log('Đặt tài khoản hiện tại:', account.id);
       localStorage.setItem('hanet_current_account_direct', account.id);
@@ -715,13 +723,22 @@ const CheckInApp = () => {
       const oauthConfig = JSON.parse(oauthConfigRaw);
       console.log('Đã đọc cấu hình OAuth:', oauthConfig);
       
+      // Lấy tên ứng dụng
+      const appName = oauthConfig.appName || '';
+      
       // Tạo ID tài khoản từ thông tin có sẵn
-      const accountId = 'hanet_user_' + new Date().getTime();
+      let accountId = 'hanet_user_' + new Date().getTime();
+      // Thêm tên ứng dụng vào ID nếu có
+      if (appName) {
+        const appNameSlug = appName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        accountId = `hanet_user_${appNameSlug}_${new Date().getTime()}`;
+      }
       
       // Tạo tài khoản mới
       const newAccount = {
         id: accountId,
-        name: 'Người dùng Hanet',
+        name: appName || 'Người dùng Hanet',
+        appName: appName,
         createdAt: new Date().toISOString(),
         oauthConfig: oauthConfig
       };
@@ -764,7 +781,7 @@ const CheckInApp = () => {
       // Tạo user_info đơn giản
       const simpleUserInfo = {
         username: accountId,
-        name: 'Người dùng Hanet'
+        name: appName || 'Người dùng Hanet'
       };
       
       // Lưu user_info
@@ -807,12 +824,24 @@ const CheckInApp = () => {
       const oauthConfig = oauthConfigRaw ? JSON.parse(oauthConfigRaw) : null;
       console.log('Đã đọc cấu hình OAuth:', oauthConfig);
       
+      // Lấy tên ứng dụng
+      const appName = oauthConfig ? oauthConfig.appName || '' : '';
+      
+      // Tạo ID tài khoản 
+      let accountId = userInfo.username;
+      // Thêm tên ứng dụng vào ID nếu có
+      if (appName) {
+        const appNameSlug = appName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        accountId = `${userInfo.username}_${appNameSlug}`;
+      }
+      
       // Tạo tài khoản mới
       const newAccount = {
-        id: userInfo.username,
+        id: accountId,
         name: userInfo.name || userInfo.username,
         userInfo: userInfo,
         oauthConfig: oauthConfig,
+        appName: appName,
         createdAt: new Date().toISOString()
       };
       
@@ -846,6 +875,7 @@ const CheckInApp = () => {
           ...accounts[existingIndex],
           userInfo: newAccount.userInfo,
           oauthConfig: newAccount.oauthConfig,
+          appName: newAccount.appName,
           updatedAt: new Date().toISOString()
         };
       } else {
@@ -932,6 +962,13 @@ const CheckInApp = () => {
                      (account.userInfo && account.userInfo.name) || 
                      (account.userInfo && account.userInfo.username) || 
                      account.id || 'Người dùng'}
+                    
+                    {/* Hiển thị tên ứng dụng nếu có */}
+                    {account.appName && (
+                      <span className="app-name-badge">
+                        {account.appName}
+                      </span>
+                    )}
                   </div>
                   <div className="account-email">
                     {account.email || 
@@ -1021,13 +1058,27 @@ const CheckInApp = () => {
       const accountName = prompt('Nhập tên tài khoản:');
       if (!accountName) return;
       
-      // Tạo ID ngẫu nhiên
-      const accountId = 'manual_user_' + Date.now();
+      // Lấy tên ứng dụng từ cấu hình OAuth nếu có
+      let appName = '';
+      try {
+        const oauthConfig = JSON.parse(localStorage.getItem('hanet_oauth_config') || '{}');
+        appName = oauthConfig.appName || '';
+      } catch (e) {
+        console.error('Không thể đọc cấu hình OAuth:', e);
+      }
+      
+      // Tạo ID tài khoản
+      let accountId = 'manual_user_' + Date.now();
+      if (appName) {
+        const appNameSlug = appName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        accountId = `manual_user_${appNameSlug}_${Date.now()}`;
+      }
       
       // Tạo tài khoản mới
       const newAccount = {
         id: accountId,
         name: accountName,
+        appName: appName,
         createdAt: new Date().toISOString()
       };
       

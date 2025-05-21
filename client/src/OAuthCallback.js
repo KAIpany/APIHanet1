@@ -48,11 +48,24 @@ function OAuthCallback() {
     }
     
     try {
+      // Tạo ID tài khoản kết hợp với appName để đảm bảo không bị trùng
+      let accountId = userInfo.username;
+      const appName = oauthConfig.appName || '';
+      
+      // Thêm mã ứng dụng vào ID tài khoản nếu có appName
+      if (appName) {
+        const appNameSlug = appName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        accountId = `${userInfo.username}_${appNameSlug}`;
+      }
+      
+      console.log('ID tài khoản sẽ sử dụng:', accountId);
+      
       // Khởi tạo tài khoản mới
       const newAccount = {
-        id: userInfo.username,
+        id: accountId,
         userInfo: userInfo,
         oauthConfig: oauthConfig,
+        appName: appName,
         createdAt: new Date().toISOString()
       };
       
@@ -88,6 +101,7 @@ function OAuthCallback() {
           ...accounts[existingIndex],
           userInfo: newAccount.userInfo,
           oauthConfig: newAccount.oauthConfig,
+          appName: newAccount.appName,
           updatedAt: new Date().toISOString()
         };
       } else {
@@ -119,17 +133,49 @@ function OAuthCallback() {
       
       // Thử lại với cách đơn giản hơn
       try {
+        // Tạo ID tài khoản với appName nếu có
+        let accountId = userInfo.username;
+        const appName = oauthConfig.appName || '';
+        if (appName) {
+          const appNameSlug = appName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          accountId = `${userInfo.username}_${appNameSlug}`;
+        }
+        
         // Lưu trực tiếp thông tin người dùng
         localStorage.setItem('user_info', JSON.stringify(userInfo));
         
-        // Tạo mảng tài khoản đơn giản
+        // Tạo tài khoản đơn giản
         const simpleAccount = {
-          id: userInfo.username,
+          id: accountId,
           name: userInfo.name || userInfo.username,
-          email: userInfo.email
+          email: userInfo.email,
+          appName: appName
         };
         
-        localStorage.setItem('hanet_accounts', JSON.stringify([simpleAccount]));
+        // Đọc danh sách tài khoản hiện tại
+        let accounts = [];
+        const existingAccounts = localStorage.getItem('hanet_accounts');
+        if (existingAccounts) {
+          try {
+            const parsed = JSON.parse(existingAccounts);
+            if (Array.isArray(parsed)) {
+              accounts = parsed;
+            }
+          } catch (e) {
+            console.error('Lỗi khi đọc danh sách tài khoản:', e);
+          }
+        }
+        
+        // Kiểm tra trùng lặp
+        const existingIndex = accounts.findIndex(acc => acc && acc.id === simpleAccount.id);
+        if (existingIndex >= 0) {
+          accounts[existingIndex] = simpleAccount;
+        } else {
+          accounts.push(simpleAccount);
+        }
+        
+        // Lưu danh sách tài khoản
+        localStorage.setItem('hanet_accounts', JSON.stringify(accounts));
         localStorage.setItem('hanet_current_account_id', simpleAccount.id);
         
         console.log('Đã lưu thông tin đơn giản vào localStorage');
