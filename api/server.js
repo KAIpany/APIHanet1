@@ -5,6 +5,7 @@ const getAllPlace = require("./getPlaceId");
 const getDeviceById = require("./getDeviceByPlaceId");
 const hanetServiceId = require("./hanetServiceId");
 const cors = require("cors");
+const tokenManager = require("./tokenManager");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -32,6 +33,20 @@ app.use((req, res, next) => {
       } (${duration}ms)`
     );
   });
+  next();
+});
+
+// Middleware xử lý CORS
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
   next();
 });
 
@@ -156,6 +171,134 @@ app.get("/api/checkins", validateCheckinParams, async (req, res, next) => {
     res.status(200).json(filteredCheckins);
   } catch (err) {
     next(err);
+  }
+});
+
+// API cấu hình OAuth
+app.post("/api/oauth/config", (req, res) => {
+  try {
+    const { clientId, clientSecret, refreshToken, baseUrl } = req.body;
+    
+    if (!clientId || !clientSecret) {
+      return res.status(400).json({
+        success: false,
+        message: "Cần cung cấp Client ID và Client Secret",
+      });
+    }
+    
+    const config = {
+      clientId,
+      clientSecret,
+      refreshToken: refreshToken || null,
+      baseUrl: baseUrl || "https://partner.hanet.ai",
+    };
+    
+    tokenManager.setDynamicConfig(config);
+    
+    return res.status(200).json({
+      success: true,
+      message: "Cấu hình OAuth đã được cập nhật",
+    });
+  } catch (error) {
+    console.error("Lỗi khi cập nhật cấu hình OAuth:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi cập nhật cấu hình: " + error.message,
+    });
+  }
+});
+
+// API lấy cấu hình hiện tại
+app.get("/api/oauth/config", (req, res) => {
+  try {
+    const config = tokenManager.getCurrentConfig();
+    
+    // Ẩn client secret khi trả về client
+    const safeConfig = {
+      ...config,
+      clientSecret: config.clientSecret ? "******" : null,
+      refreshToken: config.refreshToken ? "******" : null,
+    };
+    
+    return res.status(200).json({
+      success: true,
+      data: safeConfig,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy cấu hình: " + error.message,
+    });
+  }
+});
+
+// API xử lý OAuth callback
+app.get("/api/oauth/callback", async (req, res) => {
+  try {
+    const { code, redirect_uri } = req.query;
+    
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        message: "Thiếu code xác thực",
+      });
+    }
+    
+    const tokenData = await tokenManager.exchangeCodeForToken(code, redirect_uri);
+    
+    return res.status(200).json({
+      success: true,
+      message: "Xác thực thành công",
+      data: {
+        accessToken: tokenData.accessToken ? "******" : null,
+        refreshToken: tokenData.refreshToken ? "******" : null,
+        expiresIn: tokenData.expiresIn,
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi xử lý OAuth callback:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi xử lý OAuth callback: " + error.message,
+    });
+  }
+});
+
+// API kiểm tra trạng thái xác thực
+app.get("/api/oauth/status", async (req, res) => {
+  try {
+    const config = tokenManager.getCurrentConfig();
+    let status = "unconfigured";
+    let message = "Chưa cấu hình OAuth";
+    
+    if (config.clientId && config.clientSecret) {
+      status = "configured";
+      message = "Đã cấu hình OAuth";
+      
+      try {
+        const token = await tokenManager.getValidHanetToken();
+        if (token) {
+          status = "authenticated";
+          message = "Đã xác thực thành công";
+        }
+      } catch (tokenError) {
+        status = "error";
+        message = "Lỗi xác thực: " + tokenError.message;
+      }
+    }
+    
+    return res.status(200).json({
+      success: true,
+      data: {
+        status,
+        message,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi kiểm tra trạng thái: " + error.message,
+    });
   }
 });
 

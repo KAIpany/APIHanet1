@@ -7,6 +7,67 @@
   padding: 2rem 1rem;
 }
 
+/* Navigation */
+.app-nav {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1.5rem;
+}
+
+.config-button {
+  display: inline-block;
+  background-color: #4f46e5;
+  color: white;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-weight: 500;
+  transition: background-color 0.3s;
+}
+
+.config-button:hover {
+  background-color: #4338ca;
+}
+
+/* Auth message */
+.auth-message {
+  max-width: 600px;
+  margin: 3rem auto;
+  text-align: center;
+  padding: 2rem;
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.auth-message h2 {
+  color: #1e40af;
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+}
+
+.auth-message p {
+  color: #3b82f6;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+.auth-button {
+  display: inline-block;
+  background-color: #2563eb;
+  color: white;
+  text-decoration: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  transition: background-color 0.3s;
+}
+
+.auth-button:hover {
+  background-color: #1d4ed8;
+}
+
 /* Form styles */
 .query-form {
   max-width: 600px;
