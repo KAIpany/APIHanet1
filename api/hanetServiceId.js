@@ -16,6 +16,9 @@ function filterCheckinsByDay(data) {
     // Tạo một đối tượng tạm để theo dõi check-in và check-out của mỗi người theo ngày
     const checksByPerson = {};
 
+    // Sắp xếp các lần check theo thời gian
+    validCheckins.sort((a, b) => a.checkinTime - b.checkinTime);
+
     validCheckins.forEach((check) => {
       const date = check.date;
       const personKey = `${date}_${check.personID}`;
@@ -42,16 +45,23 @@ function filterCheckinsByDay(data) {
         checksByPerson[personKey] = {
           ...personInfo,
           checkinTime: check.checkinTime, // Lần check đầu tiên là check-in
-          checkoutTime: null, // Ban đầu chưa có check-out
+          checkoutTime: check.checkinTime, // Khởi tạo checkout time bằng thời gian check-in
           formattedCheckinTime: formatTimestamp(check.checkinTime),
-          formattedCheckoutTime: null
+          formattedCheckoutTime: formatTimestamp(check.checkinTime)
         };
       } else {
-        // Nếu đã có thông tin, cập nhật check-out time nếu thời gian mới muộn hơn
-        if (check.checkinTime > checksByPerson[personKey].checkinTime) {
-          checksByPerson[personKey].checkoutTime = check.checkinTime;
-          checksByPerson[personKey].formattedCheckoutTime = formatTimestamp(check.checkinTime);
-        }
+        // Nếu đã có thông tin, luôn cập nhật checkout time là lần check cuối cùng
+        checksByPerson[personKey].checkoutTime = check.checkinTime;
+        checksByPerson[personKey].formattedCheckoutTime = formatTimestamp(check.checkinTime);
+      }
+    });
+
+    // Xử lý các trường hợp checkout time trùng với checkin time
+    Object.values(checksByPerson).forEach(record => {
+      if (record.checkinTime === record.checkoutTime) {
+        // Nếu chỉ có một lần check, đặt checkout time là null
+        record.checkoutTime = null;
+        record.formattedCheckoutTime = null;
       }
     });
 
