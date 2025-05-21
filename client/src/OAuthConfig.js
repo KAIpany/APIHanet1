@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './OAuthConfig.css';
 
+const STORAGE_KEY = 'hanet_oauth_config';
+
 const OAuthConfig = () => {
   const [config, setConfig] = useState({
     clientId: '',
@@ -16,26 +18,50 @@ const OAuthConfig = () => {
     error: null
   });
 
-  // Lấy cấu hình từ server khi component mount
+  // Lấy cấu hình từ local storage khi component mount
   useEffect(() => {
+    const savedConfig = localStorage.getItem(STORAGE_KEY);
+    if (savedConfig) {
+      try {
+        const parsedConfig = JSON.parse(savedConfig);
+        setConfig(prevConfig => ({
+          ...prevConfig,
+          ...parsedConfig,
+          // Không hiển thị thông tin nhạy cảm
+          clientSecret: '',
+          refreshToken: ''
+        }));
+      } catch (error) {
+        console.error('Lỗi khi đọc cấu hình từ local storage:', error);
+      }
+    }
     fetchConfig();
     checkAuthStatus();
   }, []);
 
-  // Lấy cấu hình hiện tại
+  // Lấy cấu hình từ server
   const fetchConfig = async () => {
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/config`);
       const result = await response.json();
       
       if (result.success && result.data) {
-        setConfig({
+        const newConfig = {
           clientId: result.data.clientId || '',
           clientSecret: '',  // Không hiển thị client secret từ server
           refreshToken: '',  // Không hiển thị refresh token từ server
           baseUrl: result.data.baseUrl || 'https://partner.hanet.ai',
           tokenUrl: result.data.tokenUrl || 'https://oauth.hanet.com/token'
-        });
+        };
+        
+        setConfig(newConfig);
+        // Lưu vào local storage
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          clientId: newConfig.clientId,
+          baseUrl: newConfig.baseUrl,
+          tokenUrl: newConfig.tokenUrl
+        }));
+        
         setStatus({
           loading: false,
           message: 'Đã tải cấu hình',
@@ -93,6 +119,13 @@ const OAuthConfig = () => {
       const result = await response.json();
       
       if (result.success) {
+        // Lưu vào local storage
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          clientId: config.clientId,
+          baseUrl: config.baseUrl,
+          tokenUrl: config.tokenUrl
+        }));
+        
         setStatus({
           loading: false,
           message: 'Đã lưu cấu hình thành công',
