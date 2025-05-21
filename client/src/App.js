@@ -199,10 +199,28 @@ const CheckInApp = () => {
       }
     }
     
-    // Load danh sách tài khoản
+    // Kiểm tra trực tiếp từ localStorage
+    const ACCOUNTS_KEY = 'hanet_accounts';
+    try {
+      const savedAccounts = localStorage.getItem(ACCOUNTS_KEY);
+      console.log('Raw accounts data (direct):', savedAccounts);
+      if (savedAccounts) {
+        const parsedAccounts = JSON.parse(savedAccounts);
+        console.log('Tài khoản đã tải trực tiếp:', parsedAccounts);
+        if (Array.isArray(parsedAccounts) && parsedAccounts.length > 0) {
+          setAccounts(parsedAccounts);
+        }
+      }
+    } catch (error) {
+      console.error('Lỗi khi đọc danh sách tài khoản trực tiếp:', error);
+    }
+    
+    // Load danh sách tài khoản qua accountManager
     const loadedAccounts = getAccounts();
-    console.log('Tài khoản đã tải:', loadedAccounts);
-    setAccounts(loadedAccounts);
+    console.log('Tài khoản đã tải từ accountManager:', loadedAccounts);
+    if (Array.isArray(loadedAccounts) && loadedAccounts.length > 0) {
+      setAccounts(loadedAccounts);
+    }
     
     // Kiểm tra tài khoản hiện tại
     const currentAccount = getCurrentAccount();
@@ -243,6 +261,43 @@ const CheckInApp = () => {
   const handleSwitchAccount = (accountId) => {
     console.log('Đang chuyển đổi tài khoản:', accountId);
     setShowAccountMenu(false);
+    
+    // Lưu trạng thái trực tiếp nếu accountManager không hoạt động
+    try {
+      const ACCOUNTS_KEY = 'hanet_accounts';
+      const CURRENT_ACCOUNT_KEY = 'hanet_current_account_id';
+      const USER_INFO_KEY = 'user_info';
+      const CONFIG_KEY = 'hanet_oauth_config';
+      
+      // Lấy danh sách tài khoản
+      const savedAccounts = localStorage.getItem(ACCOUNTS_KEY);
+      if (savedAccounts) {
+        const accounts = JSON.parse(savedAccounts);
+        const account = accounts.find(acc => acc.id === accountId);
+        
+        if (account) {
+          // Lưu ID tài khoản hiện tại
+          localStorage.setItem(CURRENT_ACCOUNT_KEY, accountId);
+          
+          // Cập nhật thông tin user_info và cấu hình OAuth hiện tại
+          if (account.userInfo) {
+            localStorage.setItem(USER_INFO_KEY, JSON.stringify(account.userInfo));
+          }
+          
+          if (account.config) {
+            localStorage.setItem(CONFIG_KEY, JSON.stringify(account.config));
+          }
+          
+          // Tải lại trang để cập nhật thông tin
+          window.location.reload();
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Lỗi khi chuyển đổi tài khoản trực tiếp:', error);
+    }
+    
+    // Sử dụng accountManager (dự phòng)
     if (setCurrentAccount(accountId)) {
       console.log('Đã chuyển tài khoản thành công, đang tải lại trang');
       // Tải lại trang để cập nhật thông tin
@@ -258,6 +313,54 @@ const CheckInApp = () => {
     console.log('Xóa tài khoản:', accountId);
     
     if (window.confirm(`Bạn có chắc chắn muốn xóa tài khoản này?`)) {
+      // Thử xóa trực tiếp trước
+      try {
+        const ACCOUNTS_KEY = 'hanet_accounts';
+        const CURRENT_ACCOUNT_KEY = 'hanet_current_account_id';
+        const USER_INFO_KEY = 'user_info';
+        const CONFIG_KEY = 'hanet_oauth_config';
+        
+        // Lấy danh sách tài khoản hiện tại
+        const savedAccounts = localStorage.getItem(ACCOUNTS_KEY);
+        if (savedAccounts) {
+          const accounts = JSON.parse(savedAccounts);
+          const filteredAccounts = accounts.filter(acc => acc.id !== accountId);
+          
+          // Lưu lại danh sách sau khi xóa
+          localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(filteredAccounts));
+          
+          // Nếu xóa tài khoản hiện tại
+          const currentId = localStorage.getItem(CURRENT_ACCOUNT_KEY);
+          if (currentId === accountId) {
+            if (filteredAccounts.length > 0) {
+              // Chuyển sang tài khoản đầu tiên trong danh sách
+              const newAccount = filteredAccounts[0];
+              localStorage.setItem(CURRENT_ACCOUNT_KEY, newAccount.id);
+              if (newAccount.userInfo) {
+                localStorage.setItem(USER_INFO_KEY, JSON.stringify(newAccount.userInfo));
+              }
+              if (newAccount.config) {
+                localStorage.setItem(CONFIG_KEY, JSON.stringify(newAccount.config));
+              }
+            } else {
+              // Xóa thông tin nếu không còn tài khoản nào
+              localStorage.removeItem(CURRENT_ACCOUNT_KEY);
+              localStorage.removeItem(USER_INFO_KEY);
+              localStorage.removeItem(CONFIG_KEY);
+            }
+          }
+          
+          // Cập nhật danh sách tài khoản
+          setAccounts(filteredAccounts);
+          // Tải lại trang nếu cần
+          window.location.reload();
+          return;
+        }
+      } catch (error) {
+        console.error('Lỗi khi xóa tài khoản trực tiếp:', error);
+      }
+      
+      // Sử dụng accountManager (dự phòng)
       if (deleteAccount(accountId)) {
         console.log('Đã xóa tài khoản thành công');
         // Cập nhật danh sách tài khoản
@@ -475,7 +578,23 @@ const CheckInApp = () => {
 
         <div className="account-section" ref={accountMenuRef}>
           {/* Hiển thị thông tin người dùng hiện tại */}
-          <div className="current-account" onClick={() => setShowAccountMenu(!showAccountMenu)}>
+          <div className="current-account" onClick={() => {
+            // Khi mở menu, cập nhật lại danh sách tài khoản
+            try {
+              const ACCOUNTS_KEY = 'hanet_accounts';
+              const savedAccounts = localStorage.getItem(ACCOUNTS_KEY);
+              if (savedAccounts) {
+                const parsedAccounts = JSON.parse(savedAccounts);
+                console.log('Tài khoản khi mở menu:', parsedAccounts);
+                if (Array.isArray(parsedAccounts) && parsedAccounts.length > 0) {
+                  setAccounts(parsedAccounts);
+                }
+              }
+            } catch (error) {
+              console.error('Lỗi khi đọc danh sách tài khoản khi mở menu:', error);
+            }
+            setShowAccountMenu(!showAccountMenu);
+          }}>
             <span className="account-name">
               {userInfo ? (userInfo.name || userInfo.username || 'Người dùng') : 'Người dùng'}
             </span>
@@ -486,13 +605,35 @@ const CheckInApp = () => {
             <div className="account-menu">
               <div className="account-menu-header">
                 <h4>Tài khoản</h4>
+                <button 
+                  className="refresh-accounts-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    try {
+                      const ACCOUNTS_KEY = 'hanet_accounts';
+                      const savedAccounts = localStorage.getItem(ACCOUNTS_KEY);
+                      if (savedAccounts) {
+                        const parsedAccounts = JSON.parse(savedAccounts);
+                        console.log('Tài khoản sau khi làm mới:', parsedAccounts);
+                        if (Array.isArray(parsedAccounts) && parsedAccounts.length > 0) {
+                          setAccounts(parsedAccounts);
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Lỗi khi làm mới danh sách tài khoản:', error);
+                    }
+                  }}
+                  title="Làm mới danh sách"
+                >
+                  🔄
+                </button>
               </div>
               
               <div className="account-list">
                 {accounts && accounts.length > 0 ? accounts.map(account => (
                   <div 
                     key={account.id} 
-                    className={`account-item ${getCurrentAccount()?.id === account.id ? 'active' : ''}`}
+                    className={`account-item ${(getCurrentAccount()?.id === account.id || (userInfo && userInfo.username === account.id)) ? 'active' : ''}`}
                     onClick={() => handleSwitchAccount(account.id)}
                   >
                     <span className="account-item-name">{account.name || account.id}</span>
@@ -505,7 +646,14 @@ const CheckInApp = () => {
                     </button>
                   </div>
                 )) : (
-                  <div className="no-accounts">Chưa có tài khoản nào</div>
+                  <div className="no-accounts">
+                    Chưa có tài khoản nào
+                    <div className="storage-info">
+                      {localStorage.getItem('hanet_accounts') ? 
+                        `${JSON.parse(localStorage.getItem('hanet_accounts')).length} tài khoản trong storage` : 
+                        'Không có dữ liệu trong storage'}
+                    </div>
+                  </div>
                 )}
               </div>
               

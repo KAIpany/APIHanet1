@@ -402,12 +402,31 @@ textarea:focus {
 .account-menu-header {
   padding: 12px 15px;
   border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .account-menu-header h4 {
   margin: 0;
   color: #333;
   font-size: 14px;
+}
+
+.refresh-accounts-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #999;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.refresh-accounts-btn:hover {
+  background-color: #f0f0f0;
+  color: #333;
 }
 
 .account-list {
@@ -489,6 +508,13 @@ textarea:focus {
   color: #888;
   font-size: 13px;
   font-style: italic;
+}
+
+.storage-info {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #aaa;
+  font-style: normal;
 }
 
 /* CSS cho trang Debug */
