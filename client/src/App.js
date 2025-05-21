@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { BrowserRouter, Routes, Route, Link, Navigate } from "react-router-dom";
 import OAuthConfig from "./OAuthConfig";
 import OAuthCallback from "./OAuthCallback";
+import { getAccounts, getCurrentAccount, setCurrentAccount, deleteAccount } from "./accountManager";
 import "./App.css";
 
 const CheckInApp = () => {
@@ -24,6 +25,9 @@ const CheckInApp = () => {
   const [queryString, setQueryString] = useState(null);
   const [authStatus, setAuthStatus] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
+  const [accounts, setAccounts] = useState([]);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const accountMenuRef = useRef(null);
 
   // Kiểm tra trạng thái xác thực khi load component
   useEffect(() => {
@@ -40,7 +44,26 @@ const CheckInApp = () => {
         console.error('Lỗi khi đọc thông tin người dùng:', error);
       }
     }
+    
+    // Load danh sách tài khoản
+    const loadedAccounts = getAccounts();
+    setAccounts(loadedAccounts);
+    
     checkAuthStatus();
+  }, []);
+
+  // Đóng menu tài khoản khi click ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target)) {
+        setShowAccountMenu(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   // Kiểm tra trạng thái xác thực
@@ -54,6 +77,31 @@ const CheckInApp = () => {
       }
     } catch (error) {
       console.error("Lỗi kiểm tra trạng thái xác thực:", error);
+    }
+  };
+
+  // Chuyển đổi tài khoản
+  const handleSwitchAccount = (accountId) => {
+    setShowAccountMenu(false);
+    if (setCurrentAccount(accountId)) {
+      // Tải lại trang để cập nhật thông tin
+      window.location.reload();
+    }
+  };
+
+  // Xóa tài khoản
+  const handleDeleteAccount = (e, accountId) => {
+    e.stopPropagation(); // Ngăn không cho event lan tới phần tử cha
+    
+    if (window.confirm(`Bạn có chắc chắn muốn xóa tài khoản này?`)) {
+      if (deleteAccount(accountId)) {
+        // Cập nhật danh sách tài khoản
+        setAccounts(getAccounts());
+        // Đóng menu
+        setShowAccountMenu(false);
+        // Tải lại trang nếu cần
+        window.location.reload();
+      }
     }
   };
 
@@ -255,6 +303,49 @@ const CheckInApp = () => {
         <div className="user-info">
           <span className="welcome-text">Anycross</span>
         </div>
+
+        <div className="account-section" ref={accountMenuRef}>
+          {userInfo && (
+            <div className="current-account" onClick={() => setShowAccountMenu(!showAccountMenu)}>
+              <span className="account-name">{userInfo.name || userInfo.username}</span>
+              <span className="dropdown-icon">▼</span>
+            </div>
+          )}
+          
+          {showAccountMenu && (
+            <div className="account-menu">
+              <div className="account-menu-header">
+                <h4>Tài khoản</h4>
+              </div>
+              
+              <div className="account-list">
+                {accounts.map(account => (
+                  <div 
+                    key={account.id} 
+                    className={`account-item ${getCurrentAccount()?.id === account.id ? 'active' : ''}`}
+                    onClick={() => handleSwitchAccount(account.id)}
+                  >
+                    <span className="account-item-name">{account.name}</span>
+                    <button 
+                      className="account-delete-btn"
+                      onClick={(e) => handleDeleteAccount(e, account.id)}
+                      title="Xóa tài khoản"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="account-menu-footer">
+                <Link to="/config" className="add-account-btn" onClick={() => setShowAccountMenu(false)}>
+                  + Thêm tài khoản mới
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+        
         <Link to="/config" className="config-button">
           Cấu hình API
         </Link>

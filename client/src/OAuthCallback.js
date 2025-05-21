@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { saveAccount } from './accountManager';
 import './OAuthCallback.css';
 
 const OAuthCallback = () => {
@@ -41,29 +42,25 @@ const OAuthCallback = () => {
           console.log('Received user data:', userData);
           
           if (userData.success) {
-            // Lưu thông tin người dùng vào localStorage
-            console.log('Saving user info to localStorage:', userData.data);
-            localStorage.setItem('user_info', JSON.stringify(userData.data));
-            
-            // Verify data was saved correctly
-            const savedData = localStorage.getItem('user_info');
-            console.log('Verified saved user info:', savedData);
-          } else {
-            console.error('Failed to get user data:', userData);
-          }
-          
-          // Lưu refresh token nếu có
-          if (result.data && result.data.refreshToken) {
-            // Lấy cấu hình hiện tại từ localStorage
+            // Lấy cấu hình hiện tại để lưu trữ
             const STORAGE_KEY = 'hanet_oauth_config';
             const currentConfig = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+
+            // Cập nhật refresh token trong cấu hình nếu có
+            if (result.data && result.data.refreshToken) {
+              currentConfig.refreshToken = result.data.refreshToken;
+            }
             
-            // Cập nhật refresh token trong cấu hình
-            currentConfig.refreshToken = result.data.refreshToken;
+            // Lưu tài khoản mới hoặc cập nhật tài khoản hiện tại
+            saveAccount(userData.data, currentConfig);
             
-            // Lưu lại vào localStorage
-            console.log('Saving updated OAuth config with refresh token to localStorage');
+            // Vẫn giữ lại cách lưu cũ để tương thích ngược
+            localStorage.setItem('user_info', JSON.stringify(userData.data));
             localStorage.setItem(STORAGE_KEY, JSON.stringify(currentConfig));
+            
+            console.log('Đã lưu tài khoản:', userData.data.username);
+          } else {
+            console.error('Failed to get user data:', userData);
           }
           
           setStatus({
