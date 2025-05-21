@@ -256,6 +256,78 @@ const CheckInApp = () => {
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef(null);
 
+  // Lấy tài khoản trực tiếp từ storage
+  const getAccountsFromStorage = () => {
+    const ACCOUNTS_KEYS = [
+      'hanet_accounts_direct', // Key mới nhất (direct)
+      'hanet_accounts_v2',     // Key mới từ directAccountManager
+      'hanet_accounts'         // Key cũ từ accountManager
+    ];
+    
+    const CURRENT_ACCOUNT_KEYS = [
+      'hanet_current_account_direct', // Key mới nhất (direct)
+      'hanet_current_account_id_v2',  // Key mới từ directAccountManager
+      'hanet_current_account_id'      // Key cũ từ accountManager
+    ];
+    
+    let accounts = [];
+    let currentId = null;
+    
+    // Kiểm tra cả localStorage và sessionStorage
+    const storageTypes = [localStorage, sessionStorage];
+    
+    // Lấy danh sách tài khoản từ cả hai storage
+    for (const storage of storageTypes) {
+      try {
+        // Kiểm tra tất cả các key
+        for (const key of ACCOUNTS_KEYS) {
+          const rawData = storage.getItem(key);
+          if (rawData) {
+            console.log(`Đã tìm thấy danh sách tài khoản trong key ${key}:`, rawData);
+            const parsedAccounts = JSON.parse(rawData);
+            if (Array.isArray(parsedAccounts) && parsedAccounts.length > 0) {
+              accounts = parsedAccounts;
+              break; // Dừng khi tìm thấy
+            }
+          }
+        }
+        
+        if (accounts.length > 0) break; // Dừng khi tìm thấy
+      } catch (error) {
+        console.error('Lỗi khi đọc tài khoản từ storage:', error);
+      }
+    }
+    
+    // Lấy ID tài khoản hiện tại từ cả hai storage
+    for (const storage of storageTypes) {
+      try {
+        for (const key of CURRENT_ACCOUNT_KEYS) {
+          const id = storage.getItem(key);
+          if (id) {
+            console.log(`Đã tìm thấy ID tài khoản hiện tại trong key ${key}:`, id);
+            currentId = id;
+            break; // Dừng khi tìm thấy
+          }
+        }
+        
+        if (currentId) break; // Dừng khi tìm thấy
+      } catch (error) {
+        console.error('Lỗi khi đọc ID tài khoản hiện tại từ storage:', error);
+      }
+    }
+    
+    // Tìm tài khoản hiện tại trong danh sách
+    const currentAccount = currentId 
+      ? accounts.find(acc => acc && acc.id === currentId)
+      : null;
+    
+    return {
+      accounts,
+      currentId,
+      currentAccount
+    };
+  };
+
   // Kiểm tra trạng thái xác thực khi load component
   useEffect(() => {
     // Load user info from localStorage
@@ -270,18 +342,35 @@ const CheckInApp = () => {
       } catch (error) {
         console.error('Lỗi khi đọc thông tin người dùng:', error);
       }
+    } else {
+      // Thử tìm trong sessionStorage
+      try {
+        const sessionUserInfo = sessionStorage.getItem('user_info');
+        if (sessionUserInfo) {
+          const parsedUserInfo = JSON.parse(sessionUserInfo);
+          console.log('Parsed user info from sessionStorage:', parsedUserInfo);
+          setUserInfo(parsedUserInfo);
+        }
+      } catch (error) {
+        console.error('Lỗi khi đọc thông tin người dùng từ sessionStorage:', error);
+      }
     }
     
-    // Load danh sách tài khoản qua directAccountManager
-    const loadedAccounts = getAccounts();
-    console.log('Tài khoản đã tải từ directAccountManager:', loadedAccounts);
-    if (Array.isArray(loadedAccounts) && loadedAccounts.length > 0) {
-      setAccounts(loadedAccounts);
-    }
+    // Lấy tài khoản trực tiếp từ storage
+    const { accounts, currentAccount } = getAccountsFromStorage();
+    console.log('Tài khoản đã tải trực tiếp từ storage:', accounts);
+    console.log('Tài khoản hiện tại từ storage:', currentAccount);
     
-    // Kiểm tra tài khoản hiện tại
-    const currentAccount = getCurrentAccount();
-    console.log('Tài khoản hiện tại từ directAccountManager:', currentAccount);
+    if (accounts.length > 0) {
+      setAccounts(accounts);
+    } else {
+      // Sử dụng directAccountManager nếu không tìm thấy
+      const loadedAccounts = getAccounts();
+      console.log('Tài khoản đã tải từ directAccountManager:', loadedAccounts);
+      if (Array.isArray(loadedAccounts) && loadedAccounts.length > 0) {
+        setAccounts(loadedAccounts);
+      }
+    }
     
     checkAuthStatus();
   }, []);
@@ -314,38 +403,160 @@ const CheckInApp = () => {
     }
   };
 
-  // Chuyển đổi tài khoản
-  const handleSwitchAccount = (accountId) => {
-    console.log('Đang chuyển đổi tài khoản:', accountId);
-    setShowAccountMenu(false);
+  // Lưu ID tài khoản hiện tại vào storage
+  const saveCurrentAccountId = (accountId) => {
+    const CURRENT_ACCOUNT_KEYS = [
+      'hanet_current_account_direct',
+      'hanet_current_account_id_v2',
+      'hanet_current_account_id'
+    ];
     
-    if (setCurrentAccount(accountId)) {
-      console.log('Đã chuyển tài khoản thành công, đang tải lại trang');
-      // Tải lại trang để cập nhật thông tin
-      window.location.reload();
-    } else {
-      console.error('Không thể chuyển tài khoản:', accountId);
+    // Lưu vào cả localStorage và sessionStorage
+    try {
+      // Lưu vào localStorage trước
+      for (const key of CURRENT_ACCOUNT_KEYS) {
+        localStorage.setItem(key, accountId);
+      }
+      console.log('Đã lưu ID tài khoản hiện tại vào localStorage:', accountId);
+      return true;
+    } catch (error) {
+      console.error('Lỗi khi lưu vào localStorage:', error);
+      
+      // Thử lưu vào sessionStorage nếu localStorage thất bại
+      try {
+        for (const key of CURRENT_ACCOUNT_KEYS) {
+          sessionStorage.setItem(key, accountId);
+        }
+        console.log('Đã lưu ID tài khoản hiện tại vào sessionStorage:', accountId);
+        return true;
+      } catch (error) {
+        console.error('Lỗi khi lưu vào sessionStorage:', error);
+        return false;
+      }
     }
   };
 
-  // Xóa tài khoản
-  const handleDeleteAccount = (e, accountId) => {
-    e.stopPropagation(); // Ngăn không cho event lan tới phần tử cha
+  // Xử lý khi chọn tài khoản
+  const handleAccountSelect = (account) => {
+    console.log('Chọn tài khoản:', account);
+    
+    // Cập nhật userInfo
+    if (account.userInfo) {
+      setUserInfo(account.userInfo);
+      
+      // Lưu userInfo vào localStorage hoặc sessionStorage
+      try {
+        localStorage.setItem('user_info', JSON.stringify(account.userInfo));
+      } catch (error) {
+        console.error('Lỗi khi lưu user_info vào localStorage:', error);
+        try {
+          sessionStorage.setItem('user_info', JSON.stringify(account.userInfo));
+        } catch (sessionError) {
+          console.error('Lỗi khi lưu user_info vào sessionStorage:', sessionError);
+        }
+      }
+    }
+    
+    // Cập nhật thiết lập OAuth
+    if (account.oauthConfig) {
+      try {
+        localStorage.setItem('hanet_oauth_config', JSON.stringify(account.oauthConfig));
+      } catch (error) {
+        console.error('Lỗi khi lưu oauth_config vào localStorage:', error);
+        try {
+          sessionStorage.setItem('hanet_oauth_config', JSON.stringify(account.oauthConfig));
+        } catch (sessionError) {
+          console.error('Lỗi khi lưu oauth_config vào sessionStorage:', sessionError);
+        }
+      }
+    }
+    
+    // Lưu ID tài khoản hiện tại
+    saveCurrentAccountId(account.id);
+    
+    // Đóng menu tài khoản
+    setShowAccountMenu(false);
+    
+    // Chuyển hướng để làm mới
+    window.location.href = '/';
+  };
+
+  // Xử lý xóa tài khoản
+  const handleDeleteAccount = (accountId) => {
     console.log('Xóa tài khoản:', accountId);
     
-    if (window.confirm(`Bạn có chắc chắn muốn xóa tài khoản này?`)) {
-      if (deleteAccount(accountId)) {
-        console.log('Đã xóa tài khoản thành công');
-        // Cập nhật danh sách tài khoản
-        const updatedAccounts = getAccounts();
-        console.log('Danh sách tài khoản sau khi xóa:', updatedAccounts);
-        setAccounts(updatedAccounts);
-        // Đóng menu
-        setShowAccountMenu(false);
-        // Tải lại trang
-        window.location.reload();
+    // Lấy danh sách tài khoản từ storage
+    const { accounts, currentId } = getAccountsFromStorage();
+    
+    // Kiểm tra xem ID này có phải là ID hiện tại không
+    const isCurrentAccount = currentId === accountId;
+    
+    // Tìm tài khoản mới để chuyển sang nếu xóa tài khoản hiện tại
+    let newCurrentAccount = null;
+    if (isCurrentAccount && accounts.length > 1) {
+      newCurrentAccount = accounts.find(acc => acc.id !== accountId);
+    }
+    
+    // Lọc bỏ tài khoản cần xóa
+    const updatedAccounts = accounts.filter(acc => acc.id !== accountId);
+    
+    // Lưu danh sách tài khoản đã cập nhật
+    const ACCOUNTS_KEYS = [
+      'hanet_accounts_direct',
+      'hanet_accounts_v2',
+      'hanet_accounts'
+    ];
+    
+    try {
+      // Lưu vào localStorage trước
+      for (const key of ACCOUNTS_KEYS) {
+        localStorage.setItem(key, JSON.stringify(updatedAccounts));
+      }
+      console.log('Đã lưu danh sách tài khoản vào localStorage:', updatedAccounts);
+    } catch (error) {
+      console.error('Lỗi khi lưu vào localStorage:', error);
+      
+      // Thử lưu vào sessionStorage nếu localStorage thất bại
+      try {
+        for (const key of ACCOUNTS_KEYS) {
+          sessionStorage.setItem(key, JSON.stringify(updatedAccounts));
+        }
+        console.log('Đã lưu danh sách tài khoản vào sessionStorage:', updatedAccounts);
+      } catch (sessionError) {
+        console.error('Lỗi khi lưu vào sessionStorage:', sessionError);
+      }
+    }
+    
+    // Cập nhật state
+    setAccounts(updatedAccounts);
+    
+    // Nếu đang xóa tài khoản hiện tại, chuyển sang tài khoản khác
+    if (isCurrentAccount) {
+      if (newCurrentAccount) {
+        // Có tài khoản khác để chuyển sang
+        handleAccountSelect(newCurrentAccount);
       } else {
-        console.error('Không thể xóa tài khoản:', accountId);
+        // Không còn tài khoản nào, xóa thông tin người dùng
+        setUserInfo(null);
+        
+        // Xóa khỏi localStorage và sessionStorage
+        localStorage.removeItem('user_info');
+        sessionStorage.removeItem('user_info');
+        
+        // Xóa ID tài khoản hiện tại
+        const CURRENT_ACCOUNT_KEYS = [
+          'hanet_current_account_direct',
+          'hanet_current_account_id_v2', 
+          'hanet_current_account_id'
+        ];
+        
+        for (const key of CURRENT_ACCOUNT_KEYS) {
+          localStorage.removeItem(key);
+          sessionStorage.removeItem(key);
+        }
+        
+        // Chuyển hướng về trang chủ
+        window.location.href = '/';
       }
     }
   };
@@ -567,55 +778,48 @@ const CheckInApp = () => {
           </div>
           
           {showAccountMenu && (
-            <div className="account-menu">
+            <div className="account-menu" ref={accountMenuRef}>
               <div className="account-menu-header">
-                <h4>Tài khoản</h4>
-                <button 
-                  className="refresh-accounts-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const refreshedAccounts = getAccounts();
-                    console.log('Tài khoản sau khi làm mới:', refreshedAccounts);
-                    if (Array.isArray(refreshedAccounts) && refreshedAccounts.length > 0) {
-                      setAccounts(refreshedAccounts);
-                    }
-                  }}
-                  title="Làm mới danh sách"
-                >
-                  🔄
-                </button>
+                <h3>Tài khoản</h3>
               </div>
-              
-              <div className="account-list">
-                {accounts && accounts.length > 0 ? accounts.map(account => (
-                  <div 
-                    key={account.id} 
-                    className={`account-item ${(getCurrentAccount()?.id === account.id || (userInfo && userInfo.username === account.id)) ? 'active' : ''}`}
-                    onClick={() => handleSwitchAccount(account.id)}
-                  >
-                    <span className="account-item-name">{account.name || account.id}</span>
-                    <button 
-                      className="account-delete-btn"
-                      onClick={(e) => handleDeleteAccount(e, account.id)}
-                      title="Xóa tài khoản"
+              <div className="account-menu-list">
+                {accounts && accounts.length > 0 ? (
+                  accounts.map((account) => (
+                    <div 
+                      key={account.id} 
+                      className="account-item"
+                      onClick={() => handleAccountSelect(account)}
                     >
-                      ✕
-                    </button>
-                  </div>
-                )) : (
-                  <div className="no-accounts">
-                    Chưa có tài khoản nào
-                  </div>
+                      <div className="account-avatar">
+                        {account.userInfo && account.userInfo.avatar ? (
+                          <img src={account.userInfo.avatar} alt="Avatar" />
+                        ) : (
+                          <div className="default-avatar">{(account.userInfo && account.userInfo.name) ? account.userInfo.name.charAt(0) : '?'}</div>
+                        )}
+                      </div>
+                      <div className="account-info">
+                        <div className="account-name">
+                          {account.userInfo && (account.userInfo.name || account.userInfo.username) ? 
+                            (account.userInfo.name || account.userInfo.username) : 'Người dùng'}
+                        </div>
+                        <div className="account-email">{account.userInfo && account.userInfo.email}</div>
+                      </div>
+                      <div 
+                        className="account-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm('Bạn có chắc chắn muốn xóa tài khoản này?')) {
+                            handleDeleteAccount(account.id);
+                          }
+                        }}
+                      >
+                        ×
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="no-accounts">Không có tài khoản nào</div>
                 )}
-              </div>
-              
-              <div className="account-menu-footer">
-                <Link to="/config" className="add-account-btn" onClick={() => setShowAccountMenu(false)}>
-                  + Thêm tài khoản mới
-                </Link>
-                <Link to="/debug" className="debug-link" onClick={() => setShowAccountMenu(false)}>
-                  🛠 Debug
-                </Link>
               </div>
             </div>
           )}

@@ -386,127 +386,120 @@ textarea:focus {
   opacity: 0.7;
 }
 
+/* CSS cho menu tài khoản mới */
 .account-menu {
   position: absolute;
-  top: 100%;
+  top: 50px;
   right: 0;
-  width: 240px;
+  width: 300px;
   background-color: white;
-  border-radius: 4px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-  margin-top: 8px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
   overflow: hidden;
-  z-index: 100;
 }
 
 .account-menu-header {
-  padding: 12px 15px;
+  padding: 12px 16px;
   border-bottom: 1px solid #eee;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.account-menu-header h4 {
+.account-menu-header h3 {
   margin: 0;
-  color: #333;
-  font-size: 14px;
-}
-
-.refresh-accounts-btn {
-  background: none;
-  border: none;
-  font-size: 14px;
-  color: #999;
-  cursor: pointer;
-  padding: 3px 6px;
-  border-radius: 50%;
-  transition: all 0.2s;
-}
-
-.refresh-accounts-btn:hover {
-  background-color: #f0f0f0;
+  font-size: 16px;
   color: #333;
 }
 
-.account-list {
-  max-height: 240px;
+.account-menu-list {
+  max-height: 300px;
   overflow-y: auto;
 }
 
 .account-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 15px;
-  border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
   transition: background-color 0.2s;
+  position: relative;
 }
 
 .account-item:hover {
   background-color: #f5f5f5;
 }
 
-.account-item.active {
-  background-color: #e0f7ff;
-}
-
-.account-item-name {
-  font-size: 14px;
-  color: #333;
-}
-
-.account-delete-btn {
-  background: none;
-  border: none;
-  font-size: 12px;
-  color: #999;
-  cursor: pointer;
-  padding: 3px 6px;
+.account-avatar {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  line-height: 1;
-  transition: all 0.2s;
+  margin-right: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.account-delete-btn:hover {
+.account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.default-avatar {
+  background-color: #007bff;
+  color: white;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.account-info {
+  flex: 1;
+}
+
+.account-name {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.account-email {
+  font-size: 12px;
+  color: #666;
+}
+
+.account-delete {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: #f0f0f0;
+  color: #777;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.account-delete:hover {
   background-color: #ff5252;
   color: white;
 }
 
-.account-menu-footer {
-  padding: 12px 15px;
-  border-top: 1px solid #eee;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.add-account-btn, .debug-link {
-  display: block;
-  text-decoration: none;
-  font-size: 13px;
-  color: #0086ff;
-  transition: color 0.2s;
-  text-align: center;
-  padding: 5px 0;
-}
-
-.add-account-btn:hover, .debug-link:hover {
-  color: #0066cc;
-  text-decoration: underline;
-}
-
-.debug-link {
-  color: #555;
-  font-size: 12px;
-}
-
 .no-accounts {
-  padding: 15px;
+  padding: 16px;
   text-align: center;
-  color: #888;
-  font-size: 13px;
+  color: #666;
   font-style: italic;
 }
 
@@ -731,4 +724,82 @@ textarea:focus {
   max-height: 300px;
   overflow: auto;
   font-size: 12px;
+}
+
+/* CSS cho trang OAuthCallback */
+.oauth-callback-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px;
+  background-color: #f5f7fa;
+}
+
+.loading-indicator {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 30px 40px;
+  text-align: center;
+  max-width: 400px;
+  width: 100%;
+}
+
+.loading-indicator p {
+  color: #333;
+  font-size: 16px;
+  margin-top: 15px;
+}
+
+.loading-indicator::before {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #007bff;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error-message {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 30px;
+  text-align: center;
+  max-width: 500px;
+  width: 100%;
+}
+
+.error-message h2 {
+  color: #e53935;
+  margin-bottom: 15px;
+}
+
+.error-message p {
+  color: #555;
+  margin-bottom: 20px;
+}
+
+.error-message button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.error-message button:hover {
+  background-color: #0069d9;
 }

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiểm tra localStorage</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Kiểm tra localStorage</h1>
+    
+    <div>
+        <button id="testBasic">Kiểm tra cơ bản</button>
+        <button id="saveAccount">Lưu tài khoản test</button>
+        <button id="readAccount">Đọc tài khoản</button>
+        <button id="clearAll">Xóa tất cả</button>
+    </div>
+    
+    <div class="result" id="result">
+        <p>Kết quả sẽ hiển thị ở đây</p>
+    </div>
+    
+    <script>
+        // Hiển thị kết quả
+        function showResult(message, isError = false) {
+            const resultDiv = document.getElementById('result');
+            if (isError) {
+                resultDiv.innerHTML = `<p class="error">LỖI: ${message}</p>`;
+            } else {
+                resultDiv.innerHTML = `<p class="success">THÀNH CÔNG: ${message}</p>`;
+            }
+        }
+        
+        // Hiển thị dữ liệu
+        function showData(title, data) {
+            const resultDiv = document.getElementById('result');
+            const currentContent = resultDiv.innerHTML;
+            resultDiv.innerHTML = `${currentContent}<h3>${title}</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+        
+        // Kiểm tra cơ bản
+        document.getElementById('testBasic').addEventListener('click', function() {
+            try {
+                // Thử đọc/ghi localStorage
+                const testKey = '_test_' + Date.now();
+                localStorage.setItem(testKey, 'test_value');
+                const readValue = localStorage.getItem(testKey);
+                localStorage.removeItem(testKey);
+                
+                if (readValue === 'test_value') {
+                    showResult('localStorage hoạt động bình thường!');
+                } else {
+                    showResult('localStorage đọc/ghi không khớp', true);
+                }
+                
+                // Liệt kê tất cả keys
+                const allKeys = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    allKeys.push(localStorage.key(i));
+                }
+                
+                showData('Tất cả keys trong localStorage:', allKeys);
+            } catch (e) {
+                showResult('Lỗi khi kiểm tra localStorage: ' + e.message, true);
+            }
+        });
+        
+        // Lưu tài khoản test
+        document.getElementById('saveAccount').addEventListener('click', function() {
+            try {
+                // Tạo dữ liệu test
+                const testAccount = {
+                    id: 'test_user_' + Date.now(),
+                    name: 'Người dùng Test',
+                    email: 'test@example.com',
+                    lastUpdated: new Date().toISOString()
+                };
+                
+                // Lưu vào các key cũ và mới
+                const ACCOUNTS_KEY_OLD = 'hanet_accounts';
+                const ACCOUNTS_KEY_NEW = 'hanet_accounts_v2';
+                const CURRENT_ACCOUNT_KEY_OLD = 'hanet_current_account_id';
+                const CURRENT_ACCOUNT_KEY_NEW = 'hanet_current_account_id_v2';
+                
+                // Lấy danh sách tài khoản hiện tại nếu có
+                let accounts = [];
+                try {
+                    const existingAccounts = localStorage.getItem(ACCOUNTS_KEY_NEW);
+                    if (existingAccounts) {
+                        accounts = JSON.parse(existingAccounts);
+                    }
+                } catch (err) {
+                    console.error('Lỗi khi đọc danh sách tài khoản:', err);
+                }
+                
+                // Thêm tài khoản mới vào danh sách
+                if (!Array.isArray(accounts)) accounts = [];
+                accounts.push(testAccount);
+                
+                // Lưu lại danh sách
+                const accountsJSON = JSON.stringify(accounts);
+                localStorage.setItem(ACCOUNTS_KEY_NEW, accountsJSON);
+                localStorage.setItem(ACCOUNTS_KEY_OLD, accountsJSON);
+                
+                // Đặt làm tài khoản hiện tại
+                localStorage.setItem(CURRENT_ACCOUNT_KEY_NEW, testAccount.id);
+                localStorage.setItem(CURRENT_ACCOUNT_KEY_OLD, testAccount.id);
+                
+                showResult('Đã lưu tài khoản test thành công!');
+                showData('Tài khoản đã lưu:', testAccount);
+                showData('Danh sách tài khoản:', accounts);
+            } catch (e) {
+                showResult('Lỗi khi lưu tài khoản: ' + e.message, true);
+            }
+        });
+        
+        // Đọc tài khoản
+        document.getElementById('readAccount').addEventListener('click', function() {
+            try {
+                const ACCOUNTS_KEY_OLD = 'hanet_accounts';
+                const ACCOUNTS_KEY_NEW = 'hanet_accounts_v2';
+                const CURRENT_ACCOUNT_KEY_OLD = 'hanet_current_account_id';
+                const CURRENT_ACCOUNT_KEY_NEW = 'hanet_current_account_id_v2';
+                
+                // Đọc từ key mới
+                const newAccounts = localStorage.getItem(ACCOUNTS_KEY_NEW);
+                const newCurrentId = localStorage.getItem(CURRENT_ACCOUNT_KEY_NEW);
+                
+                // Đọc từ key cũ
+                const oldAccounts = localStorage.getItem(ACCOUNTS_KEY_OLD);
+                const oldCurrentId = localStorage.getItem(CURRENT_ACCOUNT_KEY_OLD);
+                
+                showResult('Đã đọc dữ liệu thành công');
+                
+                if (newAccounts) {
+                    showData('Danh sách tài khoản (key mới):', JSON.parse(newAccounts));
+                } else {
+                    showData('Danh sách tài khoản (key mới):', 'Không có dữ liệu');
+                }
+                
+                if (oldAccounts) {
+                    showData('Danh sách tài khoản (key cũ):', JSON.parse(oldAccounts));
+                } else {
+                    showData('Danh sách tài khoản (key cũ):', 'Không có dữ liệu');
+                }
+                
+                showData('ID tài khoản hiện tại (mới):', newCurrentId || 'Không có');
+                showData('ID tài khoản hiện tại (cũ):', oldCurrentId || 'Không có');
+                
+                // Hiển thị tất cả localStorage để debug
+                const allStorage = {};
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    try {
+                        allStorage[key] = JSON.parse(localStorage.getItem(key));
+                    } catch {
+                        allStorage[key] = localStorage.getItem(key);
+                    }
+                }
+                
+                showData('Tất cả dữ liệu trong localStorage:', allStorage);
+            } catch (e) {
+                showResult('Lỗi khi đọc tài khoản: ' + e.message, true);
+            }
+        });
+        
+        // Xóa tất cả
+        document.getElementById('clearAll').addEventListener('click', function() {
+            try {
+                localStorage.clear();
+                showResult('Đã xóa tất cả dữ liệu trong localStorage!');
+            } catch (e) {
+                showResult('Lỗi khi xóa dữ liệu: ' + e.message, true);
+            }
+        });
+    </script>
+</body>
+</html> 

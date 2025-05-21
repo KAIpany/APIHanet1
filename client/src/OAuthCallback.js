@@ -1,169 +1,318 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { saveAccount } from './directAccountManager';
-import './OAuthCallback.css';
+import { useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import './App.css';
 
-// Các khóa localStorage (cho lưu trực tiếp)
-const USER_INFO_KEY = 'user_info'; 
-const CONFIG_KEY = 'hanet_oauth_config';
-
-const OAuthCallback = () => {
-  const [status, setStatus] = useState({
-    message: 'Đang xử lý xác thực...',
-    error: null,
-    processing: true
-  });
+function OAuthCallback() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const location = useLocation();
   const navigate = useNavigate();
-
-  // Hàm kiểm tra localStorage
-  const checkLocalStorage = () => {
+  
+  // Kiểm tra xem storage có sẵn và hoạt động không
+  const checkStorage = (type = 'localStorage') => {
+    const storage = type === 'localStorage' ? window.localStorage : window.sessionStorage;
     try {
-      const testKey = '_test_oauth_' + Date.now();
-      localStorage.setItem(testKey, 'test');
-      const value = localStorage.getItem(testKey);
-      localStorage.removeItem(testKey);
-      return value === 'test';
-    } catch (e) {
-      console.error('Lỗi localStorage:', e);
+      const testKey = `test_${Date.now()}`;
+      storage.setItem(testKey, 'test');
+      const testValue = storage.getItem(testKey);
+      storage.removeItem(testKey);
+      console.log(`${type} kiểm tra thành công:`, testValue === 'test');
+      return testValue === 'test';
+    } catch (error) {
+      console.error(`Lỗi khi kiểm tra ${type}:`, error);
       return false;
+    }
+  };
+  
+  // Key cho việc lưu trữ
+  const ACCOUNTS_KEYS = [
+    'hanet_accounts_direct',
+    'hanet_accounts_v2',
+    'hanet_accounts'
+  ];
+  
+  const CURRENT_ACCOUNT_KEYS = [
+    'hanet_current_account_direct',
+    'hanet_current_account_id_v2',
+    'hanet_current_account_id'
+  ];
+  
+  // Lưu tài khoản mới
+  const saveAccount = (userInfo, oauthConfig) => {
+    console.log('Đang lưu tài khoản với thông tin:', userInfo);
+    
+    if (!userInfo || !userInfo.username) {
+      console.error('Không thể lưu tài khoản: thiếu thông tin người dùng hoặc username');
+      return false;
+    }
+    
+    // Khởi tạo tài khoản mới
+    const newAccount = {
+      id: userInfo.username,
+      userInfo: userInfo,
+      oauthConfig: oauthConfig,
+      createdAt: new Date().toISOString()
+    };
+    
+    // Lưu vào cả localStorage và sessionStorage
+    const saveToStorage = (storage) => {
+      try {
+        // Lấy danh sách tài khoản hiện tại
+        let accounts = [];
+        let accountsLoaded = false;
+        
+        // Thử đọc từ tất cả các key
+        for (const key of ACCOUNTS_KEYS) {
+          try {
+            const rawData = storage.getItem(key);
+            if (rawData) {
+              const parsedAccounts = JSON.parse(rawData);
+              if (Array.isArray(parsedAccounts)) {
+                accounts = parsedAccounts;
+                accountsLoaded = true;
+                console.log(`Đã tải danh sách tài khoản từ ${key}:`, accounts);
+                break;
+              }
+            }
+          } catch (e) {
+            console.error(`Lỗi khi đọc ${key} từ storage:`, e);
+          }
+        }
+        
+        if (!accountsLoaded) {
+          accounts = [];
+        }
+        
+        // Kiểm tra xem tài khoản đã tồn tại chưa
+        const existingIndex = accounts.findIndex(acc => acc && acc.id === newAccount.id);
+        
+        if (existingIndex >= 0) {
+          // Cập nhật tài khoản đã tồn tại
+          accounts[existingIndex] = {
+            ...accounts[existingIndex],
+            userInfo: newAccount.userInfo,
+            oauthConfig: newAccount.oauthConfig,
+            updatedAt: new Date().toISOString()
+          };
+        } else {
+          // Thêm tài khoản mới
+          accounts.push(newAccount);
+        }
+        
+        // Lưu vào tất cả các key
+        for (const key of ACCOUNTS_KEYS) {
+          storage.setItem(key, JSON.stringify(accounts));
+        }
+        
+        // Lưu ID tài khoản hiện tại
+        for (const key of CURRENT_ACCOUNT_KEYS) {
+          storage.setItem(key, newAccount.id);
+        }
+        
+        console.log('Đã lưu danh sách tài khoản và ID hiện tại:', accounts);
+        return true;
+      } catch (error) {
+        console.error('Lỗi khi lưu tài khoản vào storage:', error);
+        return false;
+      }
+    };
+    
+    // Thử lưu vào localStorage
+    const localStorageWorking = checkStorage('localStorage');
+    let saved = false;
+    
+    if (localStorageWorking) {
+      saved = saveToStorage(localStorage);
+      console.log('Kết quả lưu vào localStorage:', saved);
+    }
+    
+    // Nếu lưu vào localStorage thất bại hoặc không khả dụng, thử lưu vào sessionStorage
+    if (!saved) {
+      const sessionStorageWorking = checkStorage('sessionStorage');
+      if (sessionStorageWorking) {
+        saved = saveToStorage(sessionStorage);
+        console.log('Kết quả lưu vào sessionStorage:', saved);
+      }
+    }
+    
+    // Lưu thông tin người dùng trực tiếp
+    try {
+      if (localStorageWorking) {
+        localStorage.setItem('user_info', JSON.stringify(userInfo));
+      } else {
+        sessionStorage.setItem('user_info', JSON.stringify(userInfo));
+      }
+    } catch (error) {
+      console.error('Lỗi khi lưu user_info:', error);
+      try {
+        sessionStorage.setItem('user_info', JSON.stringify(userInfo));
+      } catch (e) {
+        console.error('Không thể lưu user_info vào cả localStorage và sessionStorage');
+      }
+    }
+    
+    // Lưu OAuth config
+    try {
+      if (localStorageWorking) {
+        localStorage.setItem('hanet_oauth_config', JSON.stringify(oauthConfig));
+      } else {
+        sessionStorage.setItem('hanet_oauth_config', JSON.stringify(oauthConfig));
+      }
+    } catch (error) {
+      console.error('Lỗi khi lưu oauth_config:', error);
+    }
+    
+    return saved;
+  };
+
+  const handleCallback = async () => {
+    const queryParams = new URLSearchParams(location.search);
+    const code = queryParams.get('code');
+    const state = queryParams.get('state');
+    const error = queryParams.get('error');
+    
+    if (error) {
+      console.error('Lỗi OAuth:', error);
+      setError(`Lỗi xác thực: ${error}`);
+      setLoading(false);
+      return;
+    }
+    
+    if (!code) {
+      console.error('Thiếu mã xác thực');
+      setError('Thiếu thông tin xác thực từ máy chủ');
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      console.log('Đang xử lý callback với code:', code);
+      
+      // Lấy OAuth config từ localStorage
+      let oauthConfig;
+      try {
+        const savedOAuthConfig = localStorage.getItem('hanet_oauth_config');
+        if (savedOAuthConfig) {
+          oauthConfig = JSON.parse(savedOAuthConfig);
+        }
+      } catch (error) {
+        console.error('Lỗi khi lấy oauth_config từ localStorage:', error);
+        
+        // Thử lấy từ sessionStorage
+        try {
+          const sessionOAuthConfig = sessionStorage.getItem('hanet_oauth_config');
+          if (sessionOAuthConfig) {
+            oauthConfig = JSON.parse(sessionOAuthConfig);
+          }
+        } catch (e) {
+          console.error('Lỗi khi lấy oauth_config từ sessionStorage:', e);
+        }
+      }
+      
+      if (!oauthConfig) {
+        setError('Không tìm thấy cấu hình xác thực');
+        setLoading(false);
+        return;
+      }
+      
+      // Exchange the authorization code for an access token
+      const tokenResponse = await axios.post(oauthConfig.tokenUrl, {
+        code,
+        client_id: oauthConfig.clientId,
+        client_secret: oauthConfig.clientSecret,
+        redirect_uri: oauthConfig.redirectUri,
+        grant_type: 'authorization_code'
+      });
+      
+      const { access_token, refresh_token, expires_in } = tokenResponse.data;
+      
+      // Lưu token
+      const tokenData = {
+        access_token,
+        refresh_token,
+        expires_in,
+        expiry_date: new Date().getTime() + expires_in * 1000
+      };
+      
+      // Cập nhật OAuth config với token mới
+      oauthConfig.token = tokenData;
+      
+      // Lưu OAuth config đã cập nhật vào storage
+      try {
+        localStorage.setItem('hanet_oauth_config', JSON.stringify(oauthConfig));
+      } catch (error) {
+        console.error('Lỗi khi lưu oauth_config vào localStorage:', error);
+        try {
+          sessionStorage.setItem('hanet_oauth_config', JSON.stringify(oauthConfig));
+        } catch (e) {
+          console.error('Lỗi khi lưu oauth_config vào sessionStorage:', e);
+        }
+      }
+      
+      // Lấy thông tin người dùng
+      const userInfoResponse = await axios.get(oauthConfig.userInfoUrl, {
+        headers: {
+          Authorization: `Bearer ${access_token}`
+        }
+      });
+      
+      const userInfo = userInfoResponse.data;
+      console.log('Thông tin người dùng:', userInfo);
+      
+      // Lưu thông tin người dùng vào storage
+      try {
+        localStorage.setItem('user_info', JSON.stringify(userInfo));
+      } catch (error) {
+        console.error('Lỗi khi lưu user_info vào localStorage:', error);
+        try {
+          sessionStorage.setItem('user_info', JSON.stringify(userInfo));
+        } catch (e) {
+          console.error('Lỗi khi lưu user_info vào sessionStorage:', e);
+        }
+      }
+      
+      // Lưu tài khoản
+      const saveResult = saveAccount(userInfo, oauthConfig);
+      console.log('Kết quả lưu tài khoản:', saveResult);
+      
+      // Điều hướng về trang chủ
+      setLoading(false);
+      navigate('/');
+    } catch (error) {
+      console.error('Lỗi khi xử lý OAuth callback:', error);
+      setError(error.message || 'Lỗi không xác định khi xử lý xác thực');
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    const handleCallback = async () => {
-      try {
-        // Kiểm tra localStorage trước
-        if (!checkLocalStorage()) {
-          throw new Error('Trình duyệt không hỗ trợ hoặc đã chặn localStorage. Vui lòng kiểm tra cài đặt trình duyệt.');
-        }
-
-        // Lấy code từ query string
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get('code');
-        
-        if (!code) {
-          setStatus({
-            message: 'Không nhận được mã xác thực từ Hanet',
-            error: 'Thiếu code xác thực',
-            processing: false
-          });
-          return;
-        }
-        
-        // Tạo redirect URI giống với lúc gửi request ban đầu
-        const redirectUri = `${window.location.origin}/oauth-callback`;
-        
-        // Gọi API để đổi code lấy token
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/callback?code=${code}&redirect_uri=${encodeURIComponent(redirectUri)}`);
-        const result = await response.json();
-        
-        if (result.success) {
-          // Lấy thông tin người dùng
-          const userResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/user/info`);
-          const userData = await userResponse.json();
-          
-          console.log('Received user data:', userData);
-          
-          if (userData.success) {
-            try {
-              // Lưu cấu hình OAuth
-              const currentConfig = result.data || {};
-              console.log('Cấu hình OAuth hiện tại:', currentConfig);
-              
-              // Lưu tài khoản qua module mới
-              const saveResult = saveAccount(userData.data, currentConfig);
-              console.log('Kết quả lưu tài khoản (directAccountManager):', saveResult);
-              
-              // Vẫn lưu cả thông tin cơ bản cho tương thích ngược
-              localStorage.setItem(USER_INFO_KEY, JSON.stringify(userData.data));
-              localStorage.setItem(CONFIG_KEY, JSON.stringify(currentConfig));
-              
-              console.log('Đã lưu tài khoản:', userData.data.username);
-            } catch (storageError) {
-              console.error('Lỗi khi lưu thông tin:', storageError);
-              setStatus({
-                message: 'Đã xác thực thành công nhưng không thể lưu thông tin',
-                error: 'Có vấn đề với localStorage: ' + storageError.message,
-                processing: false
-              });
-              return;
-            }
-          } else {
-            console.error('Failed to get user data:', userData);
-            throw new Error('Không thể lấy thông tin người dùng');
-          }
-          
-          setStatus({
-            message: 'Xác thực thành công! Đang chuyển hướng...',
-            error: null,
-            processing: false
-          });
-          
-          // Thông báo cho cửa sổ mở ra (nếu là popup)
-          if (window.opener) {
-            window.opener.postMessage({ 
-              type: 'OAUTH_SUCCESS',
-              userData: userData.success ? userData.data : null
-            }, window.location.origin);
-            // Đóng cửa sổ popup sau 2 giây
-            setTimeout(() => {
-              window.close();
-            }, 2000);
-          } else {
-            // Nếu không phải popup, chuyển về trang chính sau 2 giây
-            setTimeout(() => {
-              navigate('/');
-            }, 2000);
-          }
-        } else {
-          throw new Error(result.message || 'Lỗi xác thực không xác định');
-        }
-      } catch (error) {
-        console.error('Lỗi xử lý OAuth callback:', error);
-        setStatus({
-          message: 'Xác thực thất bại',
-          error: error.message,
-          processing: false
-        });
-      }
-    };
-    
     handleCallback();
-  }, [navigate]);
+  }, []);
 
-  return (
-    <div className="oauth-callback-container">
-      <div className="oauth-callback-card">
-        <h2>Xác thực Hanet</h2>
-        
-        <div className={`status-message ${status.error ? 'error' : status.processing ? 'processing' : 'success'}`}>
-          <div className="status-icon">
-            {status.processing ? (
-              <div className="loading-spinner"></div>
-            ) : status.error ? (
-              <span className="error-icon">✕</span>
-            ) : (
-              <span className="success-icon">✓</span>
-            )}
-          </div>
-          <p>{status.message}</p>
+  if (loading) {
+    return (
+      <div className="oauth-callback-container">
+        <div className="loading-indicator">
+          <p>Đang xử lý đăng nhập...</p>
         </div>
-        
-        {status.error && (
-          <div className="error-details">
-            <h3>Chi tiết lỗi:</h3>
-            <p>{status.error}</p>
-            <button 
-              className="retry-button"
-              onClick={() => window.location.href = '/'}
-            >
-              Quay lại trang chính
-            </button>
-          </div>
-        )}
       </div>
-    </div>
-  );
-};
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="oauth-callback-container">
+        <div className="error-message">
+          <h2>Lỗi xác thực</h2>
+          <p>{error}</p>
+          <button onClick={() => navigate('/')}>Quay lại trang chủ</button>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
 
 export default OAuthCallback; 
