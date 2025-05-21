@@ -136,8 +136,8 @@ const OAuthConfig = () => {
 
     // Tạo URL redirect
     const redirectUri = `${window.location.origin}/oauth-callback`;
-    // URL xác thực Hanet (mặc định sử dụng baseUrl nhưng có thể cấu hình)
-    const authUrl = `${config.baseUrl}/oauth2/authorize?client_id=${config.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code`;
+    // URL xác thực Hanet OAuth2
+    const authUrl = `https://oauth.hanet.com/oauth2/authorize?response_type=code&client_id=${config.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=full`;
     
     // Mở cửa sổ đăng nhập mới
     window.open(authUrl, 'hanetOAuth', 'width=600,height=700');
