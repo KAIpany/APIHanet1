@@ -1,591 +1,901 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Công cụ Quản lý Tài khoản</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-        }
-        .header {
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .tools {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        button {
-            padding: 10px 15px;
-            cursor: pointer;
-            background-color: #0066cc;
-            color: white;
-            border: none;
-            border-radius: 4px;
-        }
-        button:hover {
-            background-color: #004c99;
-        }
-        button.danger {
-            background-color: #cc0000;
-        }
-        button.danger:hover {
-            background-color: #990000;
-        }
-        .section {
-            margin-bottom: 30px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 15px;
-        }
-        .section h2 {
-            margin-top: 0;
-        }
-        pre {
-            background-color: #f5f5f5;
-            padding: 15px;
-            border-radius: 5px;
-            overflow-x: auto;
-            white-space: pre-wrap;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-        }
-        .account-card {
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 15px;
-            background-color: #f9f9f9;
-        }
-        .account-title {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        .account-actions {
-            display: flex;
-            gap: 5px;
-        }
-        .account-details {
-            font-size: 14px;
-        }
-        .account-actions button {
-            padding: 5px 10px;
-            font-size: 12px;
-        }
-        .status {
-            margin: 20px 0;
-            padding: 10px 15px;
-            border-radius: 5px;
-        }
-        .status.success {
-            background-color: #e6ffe6;
-            border: 1px solid #99cc99;
-            color: #006600;
-        }
-        .status.error {
-            background-color: #ffe6e6;
-            border: 1px solid #cc9999;
-            color: #660000;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hanet Account Manager</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    
+    h1, h2, h3 {
+      color: #2c3e50;
+    }
+    
+    .container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    
+    .panel {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+    
+    .account-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .account-item {
+      display: flex;
+      background-color: #f9f9f9;
+      border-radius: 4px;
+      padding: 10px;
+      border-left: 4px solid #3498db;
+      position: relative;
+    }
+    
+    .account-item.current {
+      border-left-color: #2ecc71;
+      background-color: #e8f4fd;
+    }
+    
+    .account-content {
+      flex: 1;
+    }
+    
+    .account-actions {
+      display: flex;
+      gap: 5px;
+    }
+    
+    .account-info {
+      margin-top: 5px;
+      font-size: 14px;
+      color: #7f8c8d;
+    }
+    
+    .btn {
+      padding: 8px 16px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background-color: #3498db;
+      color: white;
+    }
+    
+    .btn-danger {
+      background-color: #e74c3c;
+      color: white;
+    }
+    
+    .btn-success {
+      background-color: #2ecc71;
+      color: white;
+    }
+    
+    .btn-secondary {
+      background-color: #95a5a6;
+      color: white;
+    }
+    
+    .btn:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+    
+    pre {
+      background-color: #f8f8f8;
+      padding: 10px;
+      border-radius: 4px;
+      overflow: auto;
+      border: 1px solid #ddd;
+      max-height: 400px;
+    }
+    
+    textarea {
+      width: 100%;
+      padding: 10px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      font-family: monospace;
+      min-height: 100px;
+    }
+    
+    .form-group {
+      margin-bottom: 15px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      box-sizing: border-box;
+    }
+    
+    .grid-full {
+      grid-column: 1 / -1;
+    }
+    
+    .storage-items {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 10px;
+    }
+    
+    .storage-item {
+      background-color: #f9f9f9;
+      border-radius: 4px;
+      padding: 10px;
+      border: 1px solid #ddd;
+    }
+    
+    .storage-key {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    
+    .storage-value {
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    
+    .storage-value:hover {
+      color: #3498db;
+    }
+    
+    .tab-buttons {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    .tab-button {
+      padding: 10px 20px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-size: 16px;
+      border-bottom: 3px solid transparent;
+    }
+    
+    .tab-button.active {
+      border-bottom-color: #3498db;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Công cụ Quản lý Tài khoản</h1>
-        <p>Sử dụng công cụ này để quản lý tài khoản và kiểm tra localStorage</p>
-    </div>
-    
-    <div class="tools">
-        <button id="createAccount">Tạo tài khoản từ user_info</button>
-        <button id="refreshAccounts">Làm mới danh sách</button>
-        <button id="testStorage" title="Kiểm tra xem localStorage có hoạt động không">Kiểm tra localStorage</button>
-        <button id="saveUserInfo" title="Lưu user_info hiện tại">Lưu thông tin người dùng</button>
-        <button id="exportData" title="Xuất dữ liệu ra JSON">Xuất dữ liệu</button>
-        <button id="clearAll" class="danger">Xóa tất cả</button>
-    </div>
-    
-    <div id="status"></div>
-    
-    <div class="grid">
-        <div class="section">
-            <h2>Thông tin hiện tại</h2>
-            <div>
-                <h3>ID tài khoản hiện tại</h3>
-                <pre id="current-account-id">Đang tải...</pre>
-            </div>
-            <div>
-                <h3>Thông tin người dùng</h3>
-                <pre id="user-info">Đang tải...</pre>
-            </div>
-        </div>
-        
-        <div class="section">
-            <h2>Thông tin OAuth</h2>
-            <pre id="oauth-config">Đang tải...</pre>
-        </div>
-    </div>
-    
-    <div class="section">
+  <h1>Hanet Account Manager</h1>
+  <p>Công cụ quản lý tài khoản và xem thông tin trong localStorage</p>
+  
+  <div class="tab-buttons">
+    <button class="tab-button active" data-tab="accounts">Tài khoản</button>
+    <button class="tab-button" data-tab="localStorage">localStorage</button>
+    <button class="tab-button" data-tab="oauthConfig">Cấu hình OAuth</button>
+  </div>
+
+  <div class="tab-content" id="accounts-tab">
+    <div class="container">
+      <div class="panel">
         <h2>Danh sách tài khoản</h2>
-        <div id="accounts-list" class="grid">
-            Đang tải danh sách tài khoản...
+        <div id="account-list" class="account-list">
+          <p>Đang tải...</p>
         </div>
+        <div class="form-group" style="margin-top: 20px;">
+          <button id="refresh-accounts" class="btn btn-primary">Làm mới</button>
+          <button id="migrate-accounts" class="btn btn-secondary">Chuyển đổi từ cũ</button>
+        </div>
+      </div>
+      
+      <div class="panel">
+        <h2>Tạo tài khoản mới</h2>
+        <div class="form-group">
+          <label for="new-account-name">Tên tài khoản</label>
+          <input type="text" id="new-account-name" placeholder="Nhập tên hiển thị">
+        </div>
+        <div class="form-group">
+          <label for="new-account-app">Tên ứng dụng (tùy chọn)</label>
+          <input type="text" id="new-account-app" placeholder="Ví dụ: Hanet AI">
+        </div>
+        <div class="form-group">
+          <button id="create-account" class="btn btn-success">Tạo tài khoản</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="tab-content" id="localStorage-tab" style="display: none;">
+    <div class="panel">
+      <h2>Thông tin localStorage</h2>
+      <button id="refresh-storage" class="btn btn-primary">Làm mới</button>
+      <button id="export-storage" class="btn btn-secondary">Xuất dữ liệu</button>
+      <button id="clear-storage" class="btn btn-danger">Xóa tất cả</button>
+      
+      <div class="storage-container" style="margin-top: 20px;">
+        <div id="storage-items" class="storage-items">
+          <p>Đang tải...</p>
+        </div>
+      </div>
     </div>
     
-    <div class="section">
-        <h2>Tất cả localStorage</h2>
-        <pre id="all-storage">Đang tải...</pre>
+    <div class="panel grid-full">
+      <h2>Chi tiết giá trị</h2>
+      <div class="form-group">
+        <label for="storage-key">Khóa</label>
+        <input type="text" id="storage-key" readonly>
+      </div>
+      <div class="form-group">
+        <label for="storage-value">Giá trị</label>
+        <textarea id="storage-value"></textarea>
+      </div>
+      <div class="form-group">
+        <button id="update-storage-item" class="btn btn-primary">Cập nhật</button>
+        <button id="delete-storage-item" class="btn btn-danger">Xóa</button>
+      </div>
     </div>
+  </div>
+  
+  <div class="tab-content" id="oauthConfig-tab" style="display: none;">
+    <div class="panel">
+      <h2>Cấu hình OAuth</h2>
+      <div class="form-group">
+        <label for="oauth-client-id">Client ID</label>
+        <input type="text" id="oauth-client-id" placeholder="Nhập Client ID">
+      </div>
+      <div class="form-group">
+        <label for="oauth-app-name">Tên ứng dụng</label>
+        <input type="text" id="oauth-app-name" placeholder="Ví dụ: Hanet AI">
+      </div>
+      <div class="form-group">
+        <label for="oauth-auth-url">Auth URL</label>
+        <input type="text" id="oauth-auth-url" placeholder="https://oauth.hanet.com/authorize">
+      </div>
+      <div class="form-group">
+        <label for="oauth-token-url">Token URL</label>
+        <input type="text" id="oauth-token-url" placeholder="https://oauth.hanet.com/token">
+      </div>
+      <div class="form-group">
+        <label for="oauth-redirect-uri">Redirect URI</label>
+        <input type="text" id="oauth-redirect-uri">
+      </div>
+      <div class="form-group">
+        <button id="save-oauth-config" class="btn btn-primary">Lưu cấu hình</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Định nghĩa AccountManager tương tự như trong app
+    const AccountManager = {
+      // Các key lưu trữ
+      KEYS: {
+        ACCOUNTS: 'hanet_accounts',
+        CURRENT_ACCOUNT_ID: 'hanet_current_account_id',
+        OAUTH_CONFIG: 'hanet_oauth_config',
+        USER_INFO: 'hanet_user_info'
+      },
+      
+      // Lấy danh sách tài khoản
+      getAccounts() {
+        try {
+          const accounts = localStorage.getItem(this.KEYS.ACCOUNTS);
+          return accounts ? JSON.parse(accounts) : [];
+        } catch (error) {
+          console.error('Lỗi khi lấy danh sách tài khoản:', error);
+          return [];
+        }
+      },
+      
+      // Lưu danh sách tài khoản
+      saveAccounts(accounts) {
+        try {
+          localStorage.setItem(this.KEYS.ACCOUNTS, JSON.stringify(accounts));
+          return true;
+        } catch (error) {
+          console.error('Lỗi khi lưu danh sách tài khoản:', error);
+          return false;
+        }
+      },
+      
+      // Lấy ID tài khoản hiện tại
+      getCurrentAccountId() {
+        return localStorage.getItem(this.KEYS.CURRENT_ACCOUNT_ID);
+      },
+      
+      // Lấy tài khoản hiện tại
+      getCurrentAccount() {
+        const accountId = this.getCurrentAccountId();
+        if (!accountId) return null;
+        
+        const accounts = this.getAccounts();
+        return accounts.find(account => account.id === accountId) || null;
+      },
+      
+      // Thêm tài khoản mới
+      addAccount(account) {
+        if (!account || !account.id) return false;
+        
+        const accounts = this.getAccounts();
+        const existingIndex = accounts.findIndex(acc => acc.id === account.id);
+        
+        if (existingIndex >= 0) {
+          // Cập nhật tài khoản hiện có
+          accounts[existingIndex] = {
+            ...accounts[existingIndex],
+            ...account,
+            updatedAt: new Date().toISOString()
+          };
+        } else {
+          // Thêm tài khoản mới
+          accounts.push({
+            ...account,
+            createdAt: new Date().toISOString()
+          });
+        }
+        
+        return this.saveAccounts(accounts);
+      },
+      
+      // Cập nhật tài khoản
+      updateAccount(accountId, data) {
+        const accounts = this.getAccounts();
+        const index = accounts.findIndex(acc => acc.id === accountId);
+        
+        if (index < 0) return false;
+        
+        accounts[index] = {
+          ...accounts[index],
+          ...data,
+          updatedAt: new Date().toISOString()
+        };
+        
+        return this.saveAccounts(accounts);
+      },
+      
+      // Xóa tài khoản
+      deleteAccount(accountId) {
+        const accounts = this.getAccounts();
+        const updatedAccounts = accounts.filter(acc => acc.id !== accountId);
+        
+        // Kiểm tra nếu đang xóa tài khoản hiện tại
+        const currentId = this.getCurrentAccountId();
+        if (currentId === accountId) {
+          // Nếu còn tài khoản khác, chọn tài khoản đầu tiên
+          if (updatedAccounts.length > 0) {
+            this.switchToAccount(updatedAccounts[0].id);
+          } else {
+            // Xóa thông tin tài khoản hiện tại nếu không còn tài khoản nào
+            localStorage.removeItem(this.KEYS.CURRENT_ACCOUNT_ID);
+            localStorage.removeItem(this.KEYS.OAUTH_CONFIG);
+            localStorage.removeItem(this.KEYS.USER_INFO);
+          }
+        }
+        
+        return this.saveAccounts(updatedAccounts);
+      },
+      
+      // Chuyển đổi sang tài khoản khác
+      switchToAccount(accountId) {
+        const accounts = this.getAccounts();
+        const account = accounts.find(acc => acc.id === accountId);
+        
+        if (!account) return false;
+        
+        // Lưu ID tài khoản hiện tại
+        localStorage.setItem(this.KEYS.CURRENT_ACCOUNT_ID, accountId);
+        
+        // Cập nhật OAuth config
+        if (account.oauthConfig) {
+          localStorage.setItem(this.KEYS.OAUTH_CONFIG, JSON.stringify(account.oauthConfig));
+        }
+        
+        // Cập nhật thông tin người dùng
+        if (account.userInfo) {
+          localStorage.setItem(this.KEYS.USER_INFO, JSON.stringify(account.userInfo));
+        }
+        
+        return true;
+      },
+      
+      // Tạo tài khoản thủ công
+      createManualAccount(name, appName = '') {
+        if (!name) return null;
+        
+        // Tạo ID ngẫu nhiên
+        const accountId = 'account_' + Math.random().toString(36).substring(2, 11);
+        
+        // Tạo thông tin người dùng đơn giản
+        const userInfo = {
+          id: accountId,
+          username: accountId,
+          name: name
+        };
+        
+        // Tạo cấu hình OAuth đơn giản
+        const oauthConfig = {
+          appName: appName
+        };
+        
+        // Tạo tài khoản mới
+        const account = {
+          id: accountId,
+          name: name,
+          appName: appName,
+          userInfo: userInfo,
+          oauthConfig: oauthConfig,
+          createdAt: new Date().toISOString()
+        };
+        
+        // Thêm vào danh sách tài khoản
+        if (this.addAccount(account)) {
+          return account;
+        }
+        
+        return null;
+      },
+      
+      // Tạo tài khoản từ thông tin OAuth
+      createAccountFromOAuth(userInfo, oauthConfig) {
+        if (!userInfo || !oauthConfig) return null;
+        
+        // Tạo ID tài khoản
+        const username = userInfo.username || userInfo.id || 'user_' + Math.random().toString(36).substring(2, 11);
+        const appName = oauthConfig.appName || '';
+        
+        // Tạo ID kết hợp tên người dùng và ứng dụng
+        let accountId = username;
+        if (appName) {
+          const appNameSlug = appName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          accountId = `${username}_${appNameSlug}`;
+        }
+        
+        // Tạo tài khoản mới
+        const account = {
+          id: accountId,
+          name: userInfo.name || username,
+          appName: appName,
+          userInfo: userInfo,
+          oauthConfig: oauthConfig,
+          createdAt: new Date().toISOString()
+        };
+        
+        // Thêm vào danh sách tài khoản
+        if (this.addAccount(account)) {
+          return account;
+        }
+        
+        return null;
+      },
+      
+      // Lấy cấu hình OAuth
+      getOAuthConfig() {
+        try {
+          const config = localStorage.getItem(this.KEYS.OAUTH_CONFIG);
+          return config ? JSON.parse(config) : null;
+        } catch (error) {
+          console.error('Lỗi khi lấy cấu hình OAuth:', error);
+          return null;
+        }
+      },
+      
+      // Lưu cấu hình OAuth
+      setOAuthConfig(config) {
+        if (!config) return false;
+        
+        try {
+          localStorage.setItem(this.KEYS.OAUTH_CONFIG, JSON.stringify(config));
+          
+          // Cập nhật tài khoản hiện tại nếu có
+          const currentAccountId = this.getCurrentAccountId();
+          if (currentAccountId) {
+            this.updateAccount(currentAccountId, { oauthConfig: config });
+          }
+          
+          return true;
+        } catch (error) {
+          console.error('Lỗi khi lưu cấu hình OAuth:', error);
+          return false;
+        }
+      },
+      
+      // Kiểm tra và chuyển đổi từ cấu trúc cũ
+      migrateFromOldFormat() {
+        try {
+          // Kiểm tra các key cũ
+          const oldKeys = {
+            accounts: ['hanet_accounts_direct', 'hanet_accounts_v2', 'hanet_accounts'],
+            currentAccount: ['hanet_current_account_direct', 'hanet_current_account_id_v2', 'hanet_current_account_id'],
+            oauthConfig: ['hanet_oauth_config', 'hanet_current_oauth_config_key'],
+            userInfo: ['user_info']
+          };
+          
+          let migrated = false;
+          
+          // Chuyển đổi danh sách tài khoản
+          for (const key of oldKeys.accounts) {
+            const accountsData = localStorage.getItem(key);
+            if (accountsData) {
+              try {
+                const accounts = JSON.parse(accountsData);
+                if (Array.isArray(accounts) && accounts.length > 0) {
+                  this.saveAccounts(accounts);
+                  migrated = true;
+                  console.log(`Đã chuyển đổi tài khoản từ ${key}`);
+                  break;
+                }
+              } catch (e) {
+                console.error(`Lỗi khi phân tích dữ liệu từ ${key}:`, e);
+              }
+            }
+          }
+          
+          // Chuyển đổi ID tài khoản hiện tại
+          for (const key of oldKeys.currentAccount) {
+            const currentAccountId = localStorage.getItem(key);
+            if (currentAccountId) {
+              localStorage.setItem(this.KEYS.CURRENT_ACCOUNT_ID, currentAccountId);
+              migrated = true;
+              console.log(`Đã chuyển đổi ID tài khoản hiện tại từ ${key}`);
+              break;
+            }
+          }
+          
+          // Chuyển đổi cấu hình OAuth
+          const oauthConfigKey = localStorage.getItem(oldKeys.oauthConfig[1]) || oldKeys.oauthConfig[0];
+          const oauthConfigData = localStorage.getItem(oauthConfigKey);
+          if (oauthConfigData) {
+            try {
+              const oauthConfig = JSON.parse(oauthConfigData);
+              localStorage.setItem(this.KEYS.OAUTH_CONFIG, JSON.stringify(oauthConfig));
+              migrated = true;
+              console.log(`Đã chuyển đổi cấu hình OAuth từ ${oauthConfigKey}`);
+            } catch (e) {
+              console.error('Lỗi khi phân tích cấu hình OAuth:', e);
+            }
+          }
+          
+          // Chuyển đổi thông tin người dùng
+          for (const key of oldKeys.userInfo) {
+            const userInfoData = localStorage.getItem(key);
+            if (userInfoData) {
+              try {
+                const userInfo = JSON.parse(userInfoData);
+                localStorage.setItem(this.KEYS.USER_INFO, userInfoData);
+                migrated = true;
+                console.log(`Đã chuyển đổi thông tin người dùng từ ${key}`);
+                break;
+              } catch (e) {
+                console.error(`Lỗi khi phân tích dữ liệu từ ${key}:`, e);
+              }
+            }
+          }
+          
+          return migrated;
+        } catch (error) {
+          console.error('Lỗi khi chuyển đổi từ định dạng cũ:', error);
+          return false;
+        }
+      }
+    };
+
+    // Hiển thị danh sách tài khoản
+    function renderAccountList() {
+      const accountList = document.getElementById('account-list');
+      const accounts = AccountManager.getAccounts();
+      const currentAccountId = AccountManager.getCurrentAccountId();
+      
+      if (accounts.length === 0) {
+        accountList.innerHTML = '<p>Không có tài khoản nào. Hãy tạo tài khoản mới!</p>';
+        return;
+      }
+      
+      let html = '';
+      
+      accounts.forEach(account => {
+        const isCurrent = account.id === currentAccountId;
+        
+        html += `
+          <div class="account-item ${isCurrent ? 'current' : ''}">
+            <div class="account-content">
+              <div>
+                <strong>${account.name || account.id}</strong>
+                ${account.appName ? ` <span style="color: #888; font-size: 12px;">(${account.appName})</span>` : ''}
+                ${isCurrent ? ' <span style="color: #2ecc71;">[Hiện tại]</span>' : ''}
+              </div>
+              <div class="account-info">ID: ${account.id}</div>
+              ${account.userInfo ? 
+                `<div class="account-info">
+                  ${account.userInfo.email ? `Email: ${account.userInfo.email}<br>` : ''}
+                  ${account.userInfo.username ? `Username: ${account.userInfo.username}` : ''}
+                </div>` : ''}
+            </div>
+            <div class="account-actions">
+              ${!isCurrent ? `<button class="btn btn-primary btn-switch" data-id="${account.id}">Chọn</button>` : ''}
+              <button class="btn btn-danger btn-delete" data-id="${account.id}">Xóa</button>
+            </div>
+          </div>
+        `;
+      });
+      
+      accountList.innerHTML = html;
+      
+      // Thêm xử lý sự kiện cho các nút
+      document.querySelectorAll('.btn-switch').forEach(button => {
+        button.addEventListener('click', function() {
+          const accountId = this.getAttribute('data-id');
+          AccountManager.switchToAccount(accountId);
+          renderAccountList();
+          loadOAuthConfig();
+        });
+      });
+      
+      document.querySelectorAll('.btn-delete').forEach(button => {
+        button.addEventListener('click', function() {
+          const accountId = this.getAttribute('data-id');
+          if (confirm(`Bạn có chắc chắn muốn xóa tài khoản này không?`)) {
+            AccountManager.deleteAccount(accountId);
+            renderAccountList();
+            loadOAuthConfig();
+          }
+        });
+      });
+    }
     
-    <script>
-        // Hiển thị thông báo
-        function showStatus(message, isError = false) {
-            const statusDiv = document.getElementById('status');
-            statusDiv.className = isError ? 'status error' : 'status success';
-            statusDiv.innerHTML = message;
-            
-            // Tự động ẩn sau 5 giây
-            setTimeout(() => {
-                statusDiv.innerHTML = '';
-                statusDiv.className = '';
-            }, 5000);
+    // Hiển thị localStorage
+    function renderLocalStorage() {
+      const storageItems = document.getElementById('storage-items');
+      let html = '';
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        const value = localStorage.getItem(key);
+        const shortValue = value.length > 50 ? value.substring(0, 50) + '...' : value;
+        
+        html += `
+          <div class="storage-item">
+            <div class="storage-key">${key}</div>
+            <div class="storage-value" data-key="${key}">${shortValue}</div>
+          </div>
+        `;
+      }
+      
+      storageItems.innerHTML = html;
+      
+      // Thêm xử lý sự kiện khi click vào giá trị
+      document.querySelectorAll('.storage-value').forEach(item => {
+        item.addEventListener('click', function() {
+          const key = this.getAttribute('data-key');
+          const value = localStorage.getItem(key);
+          
+          document.getElementById('storage-key').value = key;
+          
+          try {
+            // Thử định dạng JSON nếu có thể
+            const parsedValue = JSON.parse(value);
+            document.getElementById('storage-value').value = JSON.stringify(parsedValue, null, 2);
+          } catch (e) {
+            document.getElementById('storage-value').value = value;
+          }
+        });
+      });
+    }
+    
+    // Tải cấu hình OAuth
+    function loadOAuthConfig() {
+      const oauthConfig = AccountManager.getOAuthConfig();
+      
+      if (oauthConfig) {
+        document.getElementById('oauth-client-id').value = oauthConfig.clientId || '';
+        document.getElementById('oauth-app-name').value = oauthConfig.appName || '';
+        document.getElementById('oauth-auth-url').value = oauthConfig.authUrl || 'https://oauth.hanet.com/authorize';
+        document.getElementById('oauth-token-url').value = oauthConfig.accessTokenUrl || 'https://oauth.hanet.com/token';
+        document.getElementById('oauth-redirect-uri').value = oauthConfig.redirectUri || `${window.location.origin}/callback`;
+      } else {
+        // Cấu hình mặc định
+        document.getElementById('oauth-client-id').value = '';
+        document.getElementById('oauth-app-name').value = '';
+        document.getElementById('oauth-auth-url').value = 'https://oauth.hanet.com/authorize';
+        document.getElementById('oauth-token-url').value = 'https://oauth.hanet.com/token';
+        document.getElementById('oauth-redirect-uri').value = `${window.location.origin}/callback`;
+      }
+    }
+    
+    // Lưu cấu hình OAuth
+    function saveOAuthConfig() {
+      const config = {
+        clientId: document.getElementById('oauth-client-id').value,
+        appName: document.getElementById('oauth-app-name').value,
+        authUrl: document.getElementById('oauth-auth-url').value || 'https://oauth.hanet.com/authorize',
+        accessTokenUrl: document.getElementById('oauth-token-url').value || 'https://oauth.hanet.com/token',
+        redirectUri: document.getElementById('oauth-redirect-uri').value || `${window.location.origin}/callback`,
+        userInfoUrl: 'https://oauth.hanet.com/userInfo'
+      };
+      
+      if (AccountManager.setOAuthConfig(config)) {
+        alert('Đã lưu cấu hình OAuth thành công!');
+        loadOAuthConfig();
+        renderLocalStorage();
+      } else {
+        alert('Lỗi khi lưu cấu hình OAuth!');
+      }
+    }
+    
+    // Chuyển đổi giữa các tab
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.style.display = 'none';
+      });
+      
+      document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('active');
+      });
+      
+      document.getElementById(`${tabId}-tab`).style.display = 'block';
+      document.querySelector(`.tab-button[data-tab="${tabId}"]`).classList.add('active');
+    }
+    
+    // Khởi tạo
+    document.addEventListener('DOMContentLoaded', function() {
+      // Hiển thị danh sách tài khoản
+      renderAccountList();
+      
+      // Hiển thị localStorage
+      renderLocalStorage();
+      
+      // Tải cấu hình OAuth
+      loadOAuthConfig();
+      
+      // Xử lý sự kiện cho các nút
+      document.getElementById('refresh-accounts').addEventListener('click', renderAccountList);
+      
+      document.getElementById('migrate-accounts').addEventListener('click', function() {
+        if (AccountManager.migrateFromOldFormat()) {
+          alert('Đã chuyển đổi dữ liệu từ định dạng cũ thành công!');
+          renderAccountList();
+          renderLocalStorage();
+          loadOAuthConfig();
+        } else {
+          alert('Không tìm thấy dữ liệu cũ hoặc đã xảy ra lỗi khi chuyển đổi.');
+        }
+      });
+      
+      document.getElementById('create-account').addEventListener('click', function() {
+        const name = document.getElementById('new-account-name').value;
+        const appName = document.getElementById('new-account-app').value;
+        
+        if (!name) {
+          alert('Vui lòng nhập tên tài khoản!');
+          return;
         }
         
-        // Tải dữ liệu
-        function loadData() {
-            // Tải ID tài khoản hiện tại
-            const currentId = localStorage.getItem('hanet_current_account_direct') || 
-                             localStorage.getItem('hanet_current_account_id_v2') || 
-                             localStorage.getItem('hanet_current_account_id');
-            
-            document.getElementById('current-account-id').textContent = currentId || 'Không có';
-            
-            // Tải thông tin người dùng
-            try {
-                const userInfoRaw = localStorage.getItem('user_info');
-                if (userInfoRaw) {
-                    const userInfo = JSON.parse(userInfoRaw);
-                    document.getElementById('user-info').textContent = JSON.stringify(userInfo, null, 2);
-                } else {
-                    document.getElementById('user-info').textContent = 'Không có thông tin người dùng';
-                }
-            } catch (error) {
-                document.getElementById('user-info').textContent = 'Lỗi: ' + error.message;
-            }
-            
-            // Tải cấu hình OAuth
-            try {
-                const oauthConfigRaw = localStorage.getItem('hanet_oauth_config');
-                if (oauthConfigRaw) {
-                    const oauthConfig = JSON.parse(oauthConfigRaw);
-                    document.getElementById('oauth-config').textContent = JSON.stringify(oauthConfig, null, 2);
-                } else {
-                    document.getElementById('oauth-config').textContent = 'Không có cấu hình OAuth';
-                }
-            } catch (error) {
-                document.getElementById('oauth-config').textContent = 'Lỗi: ' + error.message;
-            }
-            
-            // Tải danh sách tài khoản
-            loadAccounts();
-            
-            // Tải tất cả localStorage
-            loadAllStorage();
+        const account = AccountManager.createManualAccount(name, appName);
+        
+        if (account) {
+          alert(`Đã tạo tài khoản "${name}" thành công!`);
+          document.getElementById('new-account-name').value = '';
+          document.getElementById('new-account-app').value = '';
+          
+          if (confirm('Bạn có muốn chuyển sang tài khoản mới không?')) {
+            AccountManager.switchToAccount(account.id);
+          }
+          
+          renderAccountList();
+          renderLocalStorage();
+        } else {
+          alert('Lỗi khi tạo tài khoản!');
+        }
+      });
+      
+      document.getElementById('refresh-storage').addEventListener('click', renderLocalStorage);
+      
+      document.getElementById('export-storage').addEventListener('click', function() {
+        const data = {};
+        
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          try {
+            data[key] = JSON.parse(localStorage.getItem(key));
+          } catch (e) {
+            data[key] = localStorage.getItem(key);
+          }
         }
         
-        // Tải danh sách tài khoản
-        function loadAccounts() {
-            const accountsList = document.getElementById('accounts-list');
-            
-            try {
-                // Thử đọc từ tất cả các key
-                const keys = [
-                    'hanet_accounts_direct',
-                    'hanet_accounts_v2',
-                    'hanet_accounts'
-                ];
-                
-                let accountsLoaded = false;
-                let accounts = [];
-                
-                for (const key of keys) {
-                    const rawData = localStorage.getItem(key);
-                    if (rawData) {
-                        try {
-                            accounts = JSON.parse(rawData);
-                            if (Array.isArray(accounts) && accounts.length > 0) {
-                                accountsLoaded = true;
-                                break;
-                            }
-                        } catch (e) {
-                            console.error(`Lỗi khi phân tích dữ liệu từ ${key}:`, e);
-                        }
-                    }
-                }
-                
-                if (!accountsLoaded || accounts.length === 0) {
-                    accountsList.innerHTML = '<p>Không có tài khoản nào</p>';
-                    return;
-                }
-                
-                // Hiển thị danh sách tài khoản
-                let html = '';
-                
-                accounts.forEach((account, index) => {
-                    if (!account || !account.id) return;
-                    
-                    const isCurrentAccount = account.id === (localStorage.getItem('hanet_current_account_direct') || 
-                                                           localStorage.getItem('hanet_current_account_id_v2') || 
-                                                           localStorage.getItem('hanet_current_account_id'));
-                    
-                    html += `
-                        <div class="account-card" style="${isCurrentAccount ? 'border: 2px solid #0066cc;' : ''}">
-                            <div class="account-title">
-                                <h3>${account.name || account.id || 'Không tên'}</h3>
-                                <div class="account-actions">
-                                    <button onclick="selectAccount('${account.id}')" ${isCurrentAccount ? 'disabled' : ''}>
-                                        ${isCurrentAccount ? 'Hiện tại' : 'Chọn'}
-                                    </button>
-                                    <button class="danger" onclick="deleteAccount('${account.id}')">Xóa</button>
-                                </div>
-                            </div>
-                            <div class="account-details">
-                                <p><strong>ID:</strong> ${account.id}</p>
-                                <p><strong>Tên:</strong> ${account.name || (account.userInfo && account.userInfo.name) || 'Không có'}</p>
-                                <p><strong>Email:</strong> ${account.email || (account.userInfo && account.userInfo.email) || 'Không có'}</p>
-                                <p><strong>Ngày tạo:</strong> ${new Date(account.createdAt || Date.now()).toLocaleString('vi-VN')}</p>
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                accountsList.innerHTML = html;
-            } catch (error) {
-                accountsList.innerHTML = `<p>Lỗi khi tải danh sách tài khoản: ${error.message}</p>`;
-            }
+        const dataStr = JSON.stringify(data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const dataUrl = URL.createObjectURL(dataBlob);
+        
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = 'hanet_storage_' + new Date().toISOString().substring(0, 10) + '.json';
+        link.click();
+      });
+      
+      document.getElementById('clear-storage').addEventListener('click', function() {
+        if (confirm('Bạn có chắc chắn muốn xóa tất cả dữ liệu trong localStorage? Hành động này không thể hoàn tác!')) {
+          localStorage.clear();
+          renderLocalStorage();
+          renderAccountList();
+          loadOAuthConfig();
+          alert('Đã xóa tất cả dữ liệu trong localStorage!');
+        }
+      });
+      
+      document.getElementById('update-storage-item').addEventListener('click', function() {
+        const key = document.getElementById('storage-key').value;
+        const value = document.getElementById('storage-value').value;
+        
+        if (!key) {
+          alert('Vui lòng chọn một khóa để cập nhật!');
+          return;
         }
         
-        // Tải tất cả localStorage
-        function loadAllStorage() {
-            try {
-                const allStorage = {};
-                for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    try {
-                        allStorage[key] = JSON.parse(localStorage.getItem(key));
-                    } catch {
-                        allStorage[key] = localStorage.getItem(key);
-                    }
-                }
-                
-                document.getElementById('all-storage').textContent = JSON.stringify(allStorage, null, 2);
-            } catch (error) {
-                document.getElementById('all-storage').textContent = 'Lỗi: ' + error.message;
-            }
+        try {
+          localStorage.setItem(key, value);
+          renderLocalStorage();
+          alert('Đã cập nhật giá trị thành công!');
+        } catch (e) {
+          alert('Lỗi khi cập nhật giá trị: ' + e.message);
+        }
+      });
+      
+      document.getElementById('delete-storage-item').addEventListener('click', function() {
+        const key = document.getElementById('storage-key').value;
+        
+        if (!key) {
+          alert('Vui lòng chọn một khóa để xóa!');
+          return;
         }
         
-        // Tạo tài khoản từ thông tin người dùng hiện tại
-        function createAccountFromUserInfo() {
-            try {
-                // Lấy thông tin người dùng
-                const userInfoRaw = localStorage.getItem('user_info');
-                if (!userInfoRaw) {
-                    showStatus('Không có thông tin người dùng để tạo tài khoản', true);
-                    return false;
-                }
-                
-                const userInfo = JSON.parse(userInfoRaw);
-                
-                if (!userInfo || !userInfo.username) {
-                    showStatus('Thông tin người dùng không hợp lệ', true);
-                    return false;
-                }
-                
-                // Lấy oauth config
-                const oauthConfigRaw = localStorage.getItem('hanet_oauth_config');
-                const oauthConfig = oauthConfigRaw ? JSON.parse(oauthConfigRaw) : null;
-                
-                // Tạo tài khoản mới
-                const newAccount = {
-                    id: userInfo.username,
-                    name: userInfo.name || userInfo.username,
-                    userInfo: userInfo,
-                    oauthConfig: oauthConfig,
-                    createdAt: new Date().toISOString()
-                };
-                
-                // Lấy danh sách tài khoản hiện tại
-                let accounts = [];
-                const rawAccounts = localStorage.getItem('hanet_accounts_direct') || 
-                                  localStorage.getItem('hanet_accounts_v2') || 
-                                  localStorage.getItem('hanet_accounts');
-                
-                if (rawAccounts) {
-                    try {
-                        accounts = JSON.parse(rawAccounts);
-                        if (!Array.isArray(accounts)) {
-                            accounts = [];
-                        }
-                    } catch (e) {
-                        accounts = [];
-                    }
-                }
-                
-                // Kiểm tra xem tài khoản đã tồn tại chưa
-                const existingIndex = accounts.findIndex(acc => acc && acc.id === newAccount.id);
-                
-                if (existingIndex >= 0) {
-                    accounts[existingIndex] = {
-                        ...accounts[existingIndex],
-                        userInfo: newAccount.userInfo,
-                        oauthConfig: newAccount.oauthConfig,
-                        updatedAt: new Date().toISOString()
-                    };
-                    showStatus(`Đã cập nhật tài khoản ${newAccount.name} (${newAccount.id})`);
-                } else {
-                    accounts.push(newAccount);
-                    showStatus(`Đã thêm tài khoản mới: ${newAccount.name} (${newAccount.id})`);
-                }
-                
-                // Lưu danh sách tài khoản
-                const accountsJSON = JSON.stringify(accounts);
-                localStorage.setItem('hanet_accounts_direct', accountsJSON);
-                localStorage.setItem('hanet_accounts_v2', accountsJSON);
-                localStorage.setItem('hanet_accounts', accountsJSON);
-                
-                // Lưu ID tài khoản hiện tại
-                localStorage.setItem('hanet_current_account_direct', newAccount.id);
-                localStorage.setItem('hanet_current_account_id_v2', newAccount.id);
-                localStorage.setItem('hanet_current_account_id', newAccount.id);
-                
-                // Tải lại dữ liệu
-                loadData();
-                return true;
-            } catch (error) {
-                showStatus('Lỗi khi tạo tài khoản: ' + error.message, true);
-                return false;
-            }
+        if (confirm(`Bạn có chắc chắn muốn xóa khóa "${key}"?`)) {
+          localStorage.removeItem(key);
+          document.getElementById('storage-key').value = '';
+          document.getElementById('storage-value').value = '';
+          renderLocalStorage();
+          renderAccountList();
+          alert('Đã xóa khóa thành công!');
         }
-        
-        // Chọn tài khoản
-        function selectAccount(accountId) {
-            try {
-                // Lấy danh sách tài khoản
-                const rawAccounts = localStorage.getItem('hanet_accounts_direct') || 
-                                  localStorage.getItem('hanet_accounts_v2') || 
-                                  localStorage.getItem('hanet_accounts');
-                                  
-                if (!rawAccounts) {
-                    showStatus('Không tìm thấy danh sách tài khoản', true);
-                    return;
-                }
-                
-                const accounts = JSON.parse(rawAccounts);
-                const account = accounts.find(acc => acc && acc.id === accountId);
-                
-                if (!account) {
-                    showStatus('Không tìm thấy tài khoản với ID: ' + accountId, true);
-                    return;
-                }
-                
-                // Lưu thông tin người dùng
-                if (account.userInfo) {
-                    localStorage.setItem('user_info', JSON.stringify(account.userInfo));
-                }
-                
-                // Lưu cấu hình OAuth
-                if (account.oauthConfig) {
-                    localStorage.setItem('hanet_oauth_config', JSON.stringify(account.oauthConfig));
-                }
-                
-                // Lưu ID tài khoản hiện tại
-                localStorage.setItem('hanet_current_account_direct', account.id);
-                localStorage.setItem('hanet_current_account_id_v2', account.id);
-                localStorage.setItem('hanet_current_account_id', account.id);
-                
-                showStatus(`Đã chọn tài khoản: ${account.name || account.id}`);
-                loadData();
-            } catch (error) {
-                showStatus('Lỗi khi chọn tài khoản: ' + error.message, true);
-            }
-        }
-        
-        // Xóa tài khoản
-        function deleteAccount(accountId) {
-            if (!confirm(`Bạn có chắc chắn muốn xóa tài khoản này? (ID: ${accountId})`)) {
-                return;
-            }
-            
-            try {
-                // Lấy danh sách tài khoản
-                const rawAccounts = localStorage.getItem('hanet_accounts_direct') || 
-                                  localStorage.getItem('hanet_accounts_v2') || 
-                                  localStorage.getItem('hanet_accounts');
-                                  
-                if (!rawAccounts) {
-                    showStatus('Không tìm thấy danh sách tài khoản', true);
-                    return;
-                }
-                
-                let accounts = JSON.parse(rawAccounts);
-                
-                // Lọc bỏ tài khoản cần xóa
-                const updatedAccounts = accounts.filter(acc => acc && acc.id !== accountId);
-                
-                // Lưu danh sách tài khoản đã cập nhật
-                const accountsJSON = JSON.stringify(updatedAccounts);
-                localStorage.setItem('hanet_accounts_direct', accountsJSON);
-                localStorage.setItem('hanet_accounts_v2', accountsJSON);
-                localStorage.setItem('hanet_accounts', accountsJSON);
-                
-                // Kiểm tra nếu đang xóa tài khoản hiện tại
-                const currentId = localStorage.getItem('hanet_current_account_direct') || 
-                                localStorage.getItem('hanet_current_account_id_v2') || 
-                                localStorage.getItem('hanet_current_account_id');
-                
-                if (currentId === accountId) {
-                    // Nếu còn tài khoản khác, chuyển sang tài khoản đó
-                    if (updatedAccounts.length > 0) {
-                        selectAccount(updatedAccounts[0].id);
-                    } else {
-                        // Không còn tài khoản nào, xóa thông tin người dùng
-                        localStorage.removeItem('user_info');
-                        localStorage.removeItem('hanet_current_account_direct');
-                        localStorage.removeItem('hanet_current_account_id_v2');
-                        localStorage.removeItem('hanet_current_account_id');
-                    }
-                }
-                
-                showStatus(`Đã xóa tài khoản với ID: ${accountId}`);
-                loadData();
-            } catch (error) {
-                showStatus('Lỗi khi xóa tài khoản: ' + error.message, true);
-            }
-        }
-        
-        // Lưu thông tin người dùng
-        function saveUserInfo() {
-            try {
-                // Kiểm tra xem có cần tạo thông tin người dùng mới không
-                const userInfoRaw = localStorage.getItem('user_info');
-                if (userInfoRaw) {
-                    if (!confirm('Đã tồn tại thông tin người dùng. Bạn có muốn cập nhật?')) {
-                        return;
-                    }
-                }
-                
-                // Lấy dữ liệu từ cấu hình OAuth nếu có
-                const oauthConfigRaw = localStorage.getItem('hanet_oauth_config');
-                let username = prompt('Nhập tên đăng nhập:');
-                
-                if (!username) {
-                    showStatus('Không nhập tên đăng nhập, hủy thao tác', true);
-                    return;
-                }
-                
-                const name = prompt('Nhập tên hiển thị:') || username;
-                const email = prompt('Nhập email (tùy chọn):');
-                
-                // Tạo thông tin người dùng
-                const userInfo = {
-                    username: username,
-                    name: name,
-                    email: email,
-                    lastUpdated: new Date().toISOString()
-                };
-                
-                // Lưu thông tin người dùng
-                localStorage.setItem('user_info', JSON.stringify(userInfo));
-                showStatus('Đã lưu thông tin người dùng');
-                
-                // Hỏi người dùng có muốn tạo tài khoản từ thông tin này không
-                if (confirm('Bạn có muốn tạo tài khoản từ thông tin này không?')) {
-                    createAccountFromUserInfo();
-                }
-                
-                loadData();
-            } catch (error) {
-                showStatus('Lỗi khi lưu thông tin người dùng: ' + error.message, true);
-            }
-        }
-        
-        // Xuất dữ liệu
-        function exportData() {
-            try {
-                const exportData = {
-                    accounts: JSON.parse(localStorage.getItem('hanet_accounts_direct') || localStorage.getItem('hanet_accounts_v2') || localStorage.getItem('hanet_accounts') || '[]'),
-                    currentId: localStorage.getItem('hanet_current_account_direct') || localStorage.getItem('hanet_current_account_id_v2') || localStorage.getItem('hanet_current_account_id'),
-                    userInfo: JSON.parse(localStorage.getItem('user_info') || 'null'),
-                    oauthConfig: JSON.parse(localStorage.getItem('hanet_oauth_config') || 'null')
-                };
-                
-                // Tạo và tải xuống file
-                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
-                const downloadAnchorNode = document.createElement('a');
-                downloadAnchorNode.setAttribute("href", dataStr);
-                downloadAnchorNode.setAttribute("download", "hanet_account_" + new Date().toISOString().split('T')[0] + ".json");
-                document.body.appendChild(downloadAnchorNode);
-                downloadAnchorNode.click();
-                downloadAnchorNode.remove();
-                
-                showStatus('Đã xuất dữ liệu thành công');
-            } catch (error) {
-                showStatus('Lỗi khi xuất dữ liệu: ' + error.message, true);
-            }
-        }
-        
-        // Kiểm tra localStorage
-        function testLocalStorage() {
-            try {
-                const testKey = '_test_' + Date.now();
-                localStorage.setItem(testKey, 'test_value');
-                const readValue = localStorage.getItem(testKey);
-                localStorage.removeItem(testKey);
-                
-                if (readValue === 'test_value') {
-                    showStatus('localStorage hoạt động bình thường!');
-                } else {
-                    showStatus('localStorage đọc/ghi không khớp', true);
-                }
-            } catch (error) {
-                showStatus('Lỗi khi kiểm tra localStorage: ' + error.message, true);
-            }
-        }
-        
-        // Xóa tất cả
-        function clearAll() {
-            if (confirm('Bạn có chắc chắn muốn xóa TẤT CẢ dữ liệu trong localStorage? Hành động này không thể hoàn tác!')) {
-                try {
-                    localStorage.clear();
-                    showStatus('Đã xóa tất cả dữ liệu trong localStorage!');
-                    loadData();
-                } catch (error) {
-                    showStatus('Lỗi khi xóa dữ liệu: ' + error.message, true);
-                }
-            }
-        }
-        
-        // Gắn sự kiện cho các nút
-        document.getElementById('createAccount').addEventListener('click', createAccountFromUserInfo);
-        document.getElementById('testStorage').addEventListener('click', testLocalStorage);
-        document.getElementById('clearAll').addEventListener('click', clearAll);
-        document.getElementById('saveUserInfo').addEventListener('click', saveUserInfo);
-        document.getElementById('exportData').addEventListener('click', exportData);
-        document.getElementById('refreshAccounts').addEventListener('click', loadData);
-        
-        // Tải dữ liệu ban đầu
-        loadData();
-    </script>
+      });
+      
+      document.getElementById('save-oauth-config').addEventListener('click', saveOAuthConfig);
+      
+      // Xử lý chuyển đổi tab
+      document.querySelectorAll('.tab-button').forEach(button => {
+        button.addEventListener('click', function() {
+          const tabId = this.getAttribute('data-tab');
+          switchTab(tabId);
+        });
+      });
+    });
+  </script>
 </body>
 </html> 
