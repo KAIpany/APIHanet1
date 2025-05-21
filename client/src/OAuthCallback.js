@@ -60,12 +60,25 @@ function OAuthCallback() {
       
       console.log('ID tài khoản sẽ sử dụng:', accountId);
       
+      // Lưu cấu hình OAuth riêng biệt cho tài khoản này
+      // Tạo khóa riêng cho từng ứng dụng
+      const oauthConfigKey = appName 
+        ? `hanet_oauth_config_${appName.toLowerCase().replace(/[^a-z0-9]/g, '_')}` 
+        : 'hanet_oauth_config';
+      
+      console.log('Lưu cấu hình OAuth vào khóa:', oauthConfigKey);
+      localStorage.setItem(oauthConfigKey, JSON.stringify(oauthConfig));
+      
+      // Lưu khóa cấu hình OAuth vào tài khoản để biết khóa nào thuộc tài khoản nào
+      oauthConfig.configKey = oauthConfigKey;
+      
       // Khởi tạo tài khoản mới
       const newAccount = {
         id: accountId,
         userInfo: userInfo,
         oauthConfig: oauthConfig,
         appName: appName,
+        oauthConfigKey: oauthConfigKey,
         createdAt: new Date().toISOString()
       };
       
@@ -102,6 +115,7 @@ function OAuthCallback() {
           userInfo: newAccount.userInfo,
           oauthConfig: newAccount.oauthConfig,
           appName: newAccount.appName,
+          oauthConfigKey: oauthConfigKey,
           updatedAt: new Date().toISOString()
         };
       } else {
@@ -126,6 +140,9 @@ function OAuthCallback() {
       localStorage.setItem('hanet_current_account_id_v2', newAccount.id);
       localStorage.setItem('hanet_current_account_id', newAccount.id);
       
+      // Lưu khóa cấu hình OAuth hiện tại
+      localStorage.setItem('hanet_current_oauth_config_key', oauthConfigKey);
+      
       console.log('Đã lưu danh sách tài khoản và ID hiện tại vào localStorage');
       return true;
     } catch (error) {
@@ -141,6 +158,14 @@ function OAuthCallback() {
           accountId = `${userInfo.username}_${appNameSlug}`;
         }
         
+        // Tạo khóa riêng cho cấu hình OAuth
+        const oauthConfigKey = appName 
+          ? `hanet_oauth_config_${appName.toLowerCase().replace(/[^a-z0-9]/g, '_')}` 
+          : 'hanet_oauth_config';
+        
+        // Lưu cấu hình OAuth vào khóa riêng
+        localStorage.setItem(oauthConfigKey, JSON.stringify(oauthConfig));
+        
         // Lưu trực tiếp thông tin người dùng
         localStorage.setItem('user_info', JSON.stringify(userInfo));
         
@@ -149,7 +174,8 @@ function OAuthCallback() {
           id: accountId,
           name: userInfo.name || userInfo.username,
           email: userInfo.email,
-          appName: appName
+          appName: appName,
+          oauthConfigKey: oauthConfigKey
         };
         
         // Đọc danh sách tài khoản hiện tại
@@ -177,6 +203,9 @@ function OAuthCallback() {
         // Lưu danh sách tài khoản
         localStorage.setItem('hanet_accounts', JSON.stringify(accounts));
         localStorage.setItem('hanet_current_account_id', simpleAccount.id);
+        
+        // Lưu khóa cấu hình OAuth hiện tại
+        localStorage.setItem('hanet_current_oauth_config_key', oauthConfigKey);
         
         console.log('Đã lưu thông tin đơn giản vào localStorage');
         return true;
@@ -235,6 +264,18 @@ function OAuthCallback() {
         setError('Không tìm thấy cấu hình xác thực');
         setLoading(false);
         return;
+      }
+      
+      // Thêm redirect_uri vào cấu hình nếu chưa có
+      if (!oauthConfig.redirectUri) {
+        oauthConfig.redirectUri = `${window.location.origin}/oauth-callback`;
+        console.log('Đã thêm redirectUri vào cấu hình:', oauthConfig.redirectUri);
+      }
+      
+      // Thêm URL lấy thông tin người dùng nếu chưa có
+      if (!oauthConfig.userInfoUrl) {
+        oauthConfig.userInfoUrl = `${oauthConfig.baseUrl}/api/user/info`;
+        console.log('Đã thêm userInfoUrl vào cấu hình:', oauthConfig.userInfoUrl);
       }
       
       // Exchange the authorization code for an access token

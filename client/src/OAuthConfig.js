@@ -11,7 +11,9 @@ const OAuthConfig = () => {
     refreshToken: '',
     baseUrl: 'https://partner.hanet.ai',
     tokenUrl: 'https://oauth.hanet.com/token',
-    appName: ''
+    appName: '',
+    redirectUri: '',
+    userInfoUrl: ''
   });
   const [status, setStatus] = useState({
     loading: true,
@@ -35,7 +37,9 @@ const OAuthConfig = () => {
           clientId: parsedConfig.clientId || '',
           clientSecret: parsedConfig.clientSecret || '',
           refreshToken: parsedConfig.refreshToken || '',
-          appName: parsedConfig.appName || ''
+          appName: parsedConfig.appName || '',
+          redirectUri: parsedConfig.redirectUri || '',
+          userInfoUrl: parsedConfig.userInfoUrl || ''
         }));
       } catch (error) {
         console.error('Lỗi khi đọc cấu hình từ local storage:', error);
@@ -67,7 +71,9 @@ const OAuthConfig = () => {
           refreshToken: savedConfig.refreshToken || '',
           baseUrl: savedConfig.baseUrl || result.data.baseUrl || 'https://partner.hanet.ai',
           tokenUrl: savedConfig.tokenUrl || result.data.tokenUrl || 'https://oauth.hanet.com/token',
-          appName: savedConfig.appName || result.data.appName || ''
+          appName: savedConfig.appName || result.data.appName || '',
+          redirectUri: savedConfig.redirectUri || '',
+          userInfoUrl: savedConfig.userInfoUrl || ''
         };
         
         console.log('Cấu hình từ localStorage:', savedConfig);
@@ -144,7 +150,9 @@ const OAuthConfig = () => {
         refreshToken: config.refreshToken,
         baseUrl: config.baseUrl,
         tokenUrl: config.tokenUrl,
-        appName: config.appName
+        appName: config.appName,
+        redirectUri: config.redirectUri,
+        userInfoUrl: config.userInfoUrl
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(configToSave));
       console.log('Đã lưu cấu hình vào localStorage:', configToSave);
@@ -198,6 +206,20 @@ const OAuthConfig = () => {
 
     // Tạo URL redirect
     const redirectUri = `${window.location.origin}/oauth-callback`;
+    
+    // Lưu redirectUri vào cấu hình để sử dụng sau này
+    const updatedConfig = {
+      ...config,
+      redirectUri: redirectUri,
+      userInfoUrl: `${config.baseUrl}/api/user/info`
+    };
+    
+    // Lưu cấu hình cập nhật
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedConfig));
+    
+    // Cập nhật state
+    setConfig(updatedConfig);
+    
     // URL xác thực Hanet OAuth2
     const authUrl = `https://oauth.hanet.com/oauth2/authorize?response_type=code&client_id=${config.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=full`;
     

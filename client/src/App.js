@@ -366,6 +366,11 @@ const CheckInApp = () => {
   // Kiểm tra trạng thái xác thực
   const checkAuthStatus = async () => {
     try {
+      // Lấy khóa cấu hình OAuth hiện tại
+      const currentOAuthConfigKey = localStorage.getItem('hanet_current_oauth_config_key') || 'hanet_oauth_config';
+      console.log('Khóa cấu hình OAuth hiện tại:', currentOAuthConfigKey);
+      
+      // Sử dụng API để kiểm tra trạng thái
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/status`);
       const result = await response.json();
       
@@ -422,18 +427,40 @@ const CheckInApp = () => {
         setUserInfo(account.userInfo);
       }
       
-      // Lưu cấu hình OAuth
-      if (account.oauthConfig) {
-        console.log('Lưu cấu hình OAuth:', account.oauthConfig);
-        localStorage.setItem('hanet_oauth_config', JSON.stringify(account.oauthConfig));
-      }
-      
-      // Cập nhật tên ứng dụng hiện tại
-      if (account.appName) {
-        console.log('Cập nhật tên ứng dụng:', account.appName);
-        const oauthConfig = JSON.parse(localStorage.getItem('hanet_oauth_config') || '{}');
-        oauthConfig.appName = account.appName;
-        localStorage.setItem('hanet_oauth_config', JSON.stringify(oauthConfig));
+      // Sử dụng khóa cấu hình OAuth của tài khoản nếu có
+      if (account.oauthConfigKey) {
+        console.log('Sử dụng khóa cấu hình OAuth:', account.oauthConfigKey);
+        localStorage.setItem('hanet_current_oauth_config_key', account.oauthConfigKey);
+      } else if (account.oauthConfig) {
+        // Tài khoản cũ chưa có oauthConfigKey, tạo khóa mới và lưu riêng
+        const appName = account.appName || '';
+        const oauthConfigKey = appName 
+          ? `hanet_oauth_config_${appName.toLowerCase().replace(/[^a-z0-9]/g, '_')}` 
+          : 'hanet_oauth_config';
+        
+        console.log('Tạo khóa cấu hình OAuth mới:', oauthConfigKey);
+        localStorage.setItem(oauthConfigKey, JSON.stringify(account.oauthConfig));
+        localStorage.setItem('hanet_current_oauth_config_key', oauthConfigKey);
+        
+        // Cập nhật tài khoản trong danh sách
+        const updatedAccount = {
+          ...account,
+          oauthConfigKey: oauthConfigKey
+        };
+        
+        const accountsList = [...accounts];
+        const accountIndex = accountsList.findIndex(acc => acc.id === account.id);
+        if (accountIndex >= 0) {
+          accountsList[accountIndex] = updatedAccount;
+          
+          // Lưu danh sách tài khoản đã cập nhật
+          const accountsJSON = JSON.stringify(accountsList);
+          localStorage.setItem('hanet_accounts_direct', accountsJSON);
+          localStorage.setItem('hanet_accounts_v2', accountsJSON);
+          localStorage.setItem('hanet_accounts', accountsJSON);
+          
+          console.log('Đã cập nhật danh sách tài khoản với khóa OAuth mới');
+        }
       }
       
       // Lưu ID tài khoản hiện tại
@@ -713,8 +740,11 @@ const CheckInApp = () => {
     console.log('Thử tạo tài khoản từ cấu hình OAuth');
     
     try {
+      // Lấy khóa cấu hình OAuth hiện tại
+      const currentOAuthConfigKey = localStorage.getItem('hanet_current_oauth_config_key') || 'hanet_oauth_config';
+      
       // Lấy cấu hình OAuth
-      const oauthConfigRaw = localStorage.getItem('hanet_oauth_config');
+      const oauthConfigRaw = localStorage.getItem(currentOAuthConfigKey);
       if (!oauthConfigRaw) {
         console.error('Không có cấu hình OAuth để tạo tài khoản');
         return false;
@@ -734,11 +764,17 @@ const CheckInApp = () => {
         accountId = `hanet_user_${appNameSlug}_${new Date().getTime()}`;
       }
       
+      // Tạo khóa cấu hình OAuth cho tài khoản này
+      const oauthConfigKey = appName 
+        ? `hanet_oauth_config_${appName.toLowerCase().replace(/[^a-z0-9]/g, '_')}` 
+        : 'hanet_oauth_config';
+      
       // Tạo tài khoản mới
       const newAccount = {
         id: accountId,
         name: appName || 'Người dùng Hanet',
         appName: appName,
+        oauthConfigKey: oauthConfigKey,
         createdAt: new Date().toISOString(),
         oauthConfig: oauthConfig
       };
@@ -777,6 +813,9 @@ const CheckInApp = () => {
       localStorage.setItem('hanet_current_account_direct', accountId);
       localStorage.setItem('hanet_current_account_id_v2', accountId);
       localStorage.setItem('hanet_current_account_id', accountId);
+      
+      // Lưu khóa cấu hình OAuth hiện tại
+      localStorage.setItem('hanet_current_oauth_config_key', oauthConfigKey);
       
       // Tạo user_info đơn giản
       const simpleUserInfo = {
@@ -819,10 +858,11 @@ const CheckInApp = () => {
         return false;
       }
       
-      // Lấy oauth config
-      const oauthConfigRaw = localStorage.getItem('hanet_oauth_config');
+      // Lấy khóa cấu hình OAuth hiện tại và cấu hình
+      const currentOAuthConfigKey = localStorage.getItem('hanet_current_oauth_config_key') || 'hanet_oauth_config';
+      const oauthConfigRaw = localStorage.getItem(currentOAuthConfigKey);
       const oauthConfig = oauthConfigRaw ? JSON.parse(oauthConfigRaw) : null;
-      console.log('Đã đọc cấu hình OAuth:', oauthConfig);
+      console.log('Đã đọc cấu hình OAuth từ khóa:', currentOAuthConfigKey, oauthConfig);
       
       // Lấy tên ứng dụng
       const appName = oauthConfig ? oauthConfig.appName || '' : '';
@@ -835,6 +875,11 @@ const CheckInApp = () => {
         accountId = `${userInfo.username}_${appNameSlug}`;
       }
       
+      // Tạo khóa cấu hình OAuth cho tài khoản này
+      const oauthConfigKey = appName 
+        ? `hanet_oauth_config_${appName.toLowerCase().replace(/[^a-z0-9]/g, '_')}` 
+        : currentOAuthConfigKey;
+      
       // Tạo tài khoản mới
       const newAccount = {
         id: accountId,
@@ -842,6 +887,7 @@ const CheckInApp = () => {
         userInfo: userInfo,
         oauthConfig: oauthConfig,
         appName: appName,
+        oauthConfigKey: oauthConfigKey,
         createdAt: new Date().toISOString()
       };
       
@@ -876,6 +922,7 @@ const CheckInApp = () => {
           userInfo: newAccount.userInfo,
           oauthConfig: newAccount.oauthConfig,
           appName: newAccount.appName,
+          oauthConfigKey: oauthConfigKey,
           updatedAt: new Date().toISOString()
         };
       } else {
@@ -893,6 +940,9 @@ const CheckInApp = () => {
       localStorage.setItem('hanet_current_account_direct', newAccount.id);
       localStorage.setItem('hanet_current_account_id_v2', newAccount.id);
       localStorage.setItem('hanet_current_account_id', newAccount.id);
+      
+      // Lưu khóa cấu hình OAuth hiện tại
+      localStorage.setItem('hanet_current_oauth_config_key', oauthConfigKey);
       
       // Cập nhật state
       setAccounts(accounts);
@@ -1061,7 +1111,9 @@ const CheckInApp = () => {
       // Lấy tên ứng dụng từ cấu hình OAuth nếu có
       let appName = '';
       try {
-        const oauthConfig = JSON.parse(localStorage.getItem('hanet_oauth_config') || '{}');
+        // Lấy khóa cấu hình OAuth hiện tại
+        const currentOAuthConfigKey = localStorage.getItem('hanet_current_oauth_config_key') || 'hanet_oauth_config';
+        const oauthConfig = JSON.parse(localStorage.getItem(currentOAuthConfigKey) || '{}');
         appName = oauthConfig.appName || '';
       } catch (e) {
         console.error('Không thể đọc cấu hình OAuth:', e);
@@ -1074,11 +1126,17 @@ const CheckInApp = () => {
         accountId = `manual_user_${appNameSlug}_${Date.now()}`;
       }
       
+      // Tạo khóa cấu hình OAuth cho tài khoản này
+      const oauthConfigKey = appName 
+        ? `hanet_oauth_config_${appName.toLowerCase().replace(/[^a-z0-9]/g, '_')}` 
+        : 'hanet_oauth_config';
+      
       // Tạo tài khoản mới
       const newAccount = {
         id: accountId,
         name: accountName,
         appName: appName,
+        oauthConfigKey: oauthConfigKey,
         createdAt: new Date().toISOString()
       };
       
@@ -1115,6 +1173,9 @@ const CheckInApp = () => {
         localStorage.setItem('hanet_current_account_direct', accountId);
         localStorage.setItem('hanet_current_account_id_v2', accountId);
         localStorage.setItem('hanet_current_account_id', accountId);
+        
+        // Lưu khóa cấu hình OAuth hiện tại
+        localStorage.setItem('hanet_current_oauth_config_key', oauthConfigKey);
         
         // Cập nhật state
         setUserInfo(simpleUserInfo);
