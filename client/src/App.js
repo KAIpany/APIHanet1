@@ -5,6 +5,83 @@ import OAuthCallback from "./OAuthCallback";
 import { getAccounts, getCurrentAccount, setCurrentAccount, deleteAccount } from "./accountManager";
 import "./App.css";
 
+// Thêm một trang Debug để xem thông tin localStorage
+const DebugPage = () => {
+  const [storageItems, setStorageItems] = useState({});
+  
+  useEffect(() => {
+    // Lấy tất cả các mục từ localStorage
+    const items = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      try {
+        const value = localStorage.getItem(key);
+        items[key] = {
+          raw: value,
+          parsed: JSON.parse(value)
+        };
+      } catch (e) {
+        items[key] = {
+          raw: localStorage.getItem(key),
+          error: 'Không thể parse JSON'
+        };
+      }
+    }
+    setStorageItems(items);
+  }, []);
+  
+  const clearAllStorage = () => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa tất cả dữ liệu localStorage?')) {
+      localStorage.clear();
+      window.location.reload();
+    }
+  };
+  
+  const removeItem = (key) => {
+    if (window.confirm(`Bạn có chắc chắn muốn xóa "${key}"?`)) {
+      localStorage.removeItem(key);
+      window.location.reload();
+    }
+  };
+  
+  return (
+    <div className="debug-container">
+      <div className="debug-header">
+        <h1>Trang Debug</h1>
+        <Link to="/" className="back-button">Quay lại ứng dụng</Link>
+        <button onClick={clearAllStorage} className="clear-all-button">Xóa tất cả localStorage</button>
+      </div>
+      
+      <div className="storage-items">
+        <h2>Nội dung localStorage</h2>
+        {Object.keys(storageItems).length === 0 ? (
+          <div className="no-items">Không có dữ liệu</div>
+        ) : (
+          Object.keys(storageItems).map(key => (
+            <div key={key} className="storage-item">
+              <div className="item-header">
+                <h3>{key}</h3>
+                <button onClick={() => removeItem(key)} className="remove-button">Xóa</button>
+              </div>
+              <h4>Giá trị gốc:</h4>
+              <pre className="item-value">{storageItems[key].raw}</pre>
+              
+              {storageItems[key].error ? (
+                <p className="parse-error">{storageItems[key].error}</p>
+              ) : (
+                <>
+                  <h4>Giá trị đã parse:</h4>
+                  <pre className="item-value">{JSON.stringify(storageItems[key].parsed, null, 2)}</pre>
+                </>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
 const CheckInApp = () => {
   const [formData, setFormData] = useState({
     placeId: "",
@@ -47,7 +124,12 @@ const CheckInApp = () => {
     
     // Load danh sách tài khoản
     const loadedAccounts = getAccounts();
+    console.log('Tài khoản đã tải:', loadedAccounts);
     setAccounts(loadedAccounts);
+    
+    // Kiểm tra tài khoản hiện tại
+    const currentAccount = getCurrentAccount();
+    console.log('Tài khoản hiện tại:', currentAccount);
     
     checkAuthStatus();
   }, []);
@@ -82,25 +164,35 @@ const CheckInApp = () => {
 
   // Chuyển đổi tài khoản
   const handleSwitchAccount = (accountId) => {
+    console.log('Đang chuyển đổi tài khoản:', accountId);
     setShowAccountMenu(false);
     if (setCurrentAccount(accountId)) {
+      console.log('Đã chuyển tài khoản thành công, đang tải lại trang');
       // Tải lại trang để cập nhật thông tin
       window.location.reload();
+    } else {
+      console.error('Không thể chuyển tài khoản:', accountId);
     }
   };
 
   // Xóa tài khoản
   const handleDeleteAccount = (e, accountId) => {
     e.stopPropagation(); // Ngăn không cho event lan tới phần tử cha
+    console.log('Xóa tài khoản:', accountId);
     
     if (window.confirm(`Bạn có chắc chắn muốn xóa tài khoản này?`)) {
       if (deleteAccount(accountId)) {
+        console.log('Đã xóa tài khoản thành công');
         // Cập nhật danh sách tài khoản
-        setAccounts(getAccounts());
+        const updatedAccounts = getAccounts();
+        console.log('Danh sách tài khoản sau khi xóa:', updatedAccounts);
+        setAccounts(updatedAccounts);
         // Đóng menu
         setShowAccountMenu(false);
         // Tải lại trang nếu cần
         window.location.reload();
+      } else {
+        console.error('Không thể xóa tài khoản:', accountId);
       }
     }
   };
@@ -305,12 +397,13 @@ const CheckInApp = () => {
         </div>
 
         <div className="account-section" ref={accountMenuRef}>
-          {userInfo && (
-            <div className="current-account" onClick={() => setShowAccountMenu(!showAccountMenu)}>
-              <span className="account-name">{userInfo.name || userInfo.username}</span>
-              <span className="dropdown-icon">▼</span>
-            </div>
-          )}
+          {/* Hiển thị thông tin người dùng hiện tại */}
+          <div className="current-account" onClick={() => setShowAccountMenu(!showAccountMenu)}>
+            <span className="account-name">
+              {userInfo ? (userInfo.name || userInfo.username || 'Người dùng') : 'Người dùng'}
+            </span>
+            <span className="dropdown-icon">▼</span>
+          </div>
           
           {showAccountMenu && (
             <div className="account-menu">
@@ -319,13 +412,13 @@ const CheckInApp = () => {
               </div>
               
               <div className="account-list">
-                {accounts.map(account => (
+                {accounts && accounts.length > 0 ? accounts.map(account => (
                   <div 
                     key={account.id} 
                     className={`account-item ${getCurrentAccount()?.id === account.id ? 'active' : ''}`}
                     onClick={() => handleSwitchAccount(account.id)}
                   >
-                    <span className="account-item-name">{account.name}</span>
+                    <span className="account-item-name">{account.name || account.id}</span>
                     <button 
                       className="account-delete-btn"
                       onClick={(e) => handleDeleteAccount(e, account.id)}
@@ -334,12 +427,17 @@ const CheckInApp = () => {
                       ✕
                     </button>
                   </div>
-                ))}
+                )) : (
+                  <div className="no-accounts">Chưa có tài khoản nào</div>
+                )}
               </div>
               
               <div className="account-menu-footer">
                 <Link to="/config" className="add-account-btn" onClick={() => setShowAccountMenu(false)}>
                   + Thêm tài khoản mới
+                </Link>
+                <Link to="/debug" className="debug-link" onClick={() => setShowAccountMenu(false)}>
+                  🛠 Debug
                 </Link>
               </div>
             </div>
@@ -590,6 +688,7 @@ const CheckInApp = () => {
         <Route path="/" element={renderMainApp()} />
         <Route path="/config" element={<OAuthConfig />} />
         <Route path="/oauth-callback" element={<OAuthCallback />} />
+        <Route path="/debug" element={<DebugPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -45,14 +45,18 @@ const OAuthCallback = () => {
             // Lấy cấu hình hiện tại để lưu trữ
             const STORAGE_KEY = 'hanet_oauth_config';
             const currentConfig = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            console.log('Cấu hình OAuth hiện tại:', currentConfig);
 
             // Cập nhật refresh token trong cấu hình nếu có
             if (result.data && result.data.refreshToken) {
               currentConfig.refreshToken = result.data.refreshToken;
+              console.log('Đã cập nhật refresh token');
             }
             
             // Lưu tài khoản mới hoặc cập nhật tài khoản hiện tại
-            saveAccount(userData.data, currentConfig);
+            console.log('Lưu tài khoản với thông tin:', userData.data);
+            const saveResult = saveAccount(userData.data, currentConfig);
+            console.log('Kết quả lưu tài khoản:', saveResult);
             
             // Vẫn giữ lại cách lưu cũ để tương thích ngược
             localStorage.setItem('user_info', JSON.stringify(userData.data));
