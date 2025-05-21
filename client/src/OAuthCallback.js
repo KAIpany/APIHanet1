@@ -47,123 +47,98 @@ function OAuthCallback() {
       return false;
     }
     
-    // Khởi tạo tài khoản mới
-    const newAccount = {
-      id: userInfo.username,
-      userInfo: userInfo,
-      oauthConfig: oauthConfig,
-      createdAt: new Date().toISOString()
-    };
-    
-    // Lưu vào cả localStorage và sessionStorage
-    const saveToStorage = (storage) => {
+    try {
+      // Khởi tạo tài khoản mới
+      const newAccount = {
+        id: userInfo.username,
+        userInfo: userInfo,
+        oauthConfig: oauthConfig,
+        createdAt: new Date().toISOString()
+      };
+      
+      console.log('Tài khoản mới tạo:', newAccount);
+      
+      // Lấy danh sách tài khoản hiện tại từ localStorage
+      let accounts = [];
       try {
-        // Lấy danh sách tài khoản hiện tại
-        let accounts = [];
-        let accountsLoaded = false;
+        const storedAccounts = localStorage.getItem('hanet_accounts_direct');
+        console.log('Dữ liệu tài khoản đã lưu:', storedAccounts);
         
-        // Thử đọc từ tất cả các key
-        for (const key of ACCOUNTS_KEYS) {
-          try {
-            const rawData = storage.getItem(key);
-            if (rawData) {
-              const parsedAccounts = JSON.parse(rawData);
-              if (Array.isArray(parsedAccounts)) {
-                accounts = parsedAccounts;
-                accountsLoaded = true;
-                console.log(`Đã tải danh sách tài khoản từ ${key}:`, accounts);
-                break;
-              }
-            }
-          } catch (e) {
-            console.error(`Lỗi khi đọc ${key} từ storage:`, e);
+        if (storedAccounts) {
+          accounts = JSON.parse(storedAccounts);
+          if (!Array.isArray(accounts)) {
+            console.warn('Dữ liệu tài khoản không phải mảng, khởi tạo mới:', accounts);
+            accounts = [];
           }
         }
-        
-        if (!accountsLoaded) {
-          accounts = [];
-        }
-        
-        // Kiểm tra xem tài khoản đã tồn tại chưa
-        const existingIndex = accounts.findIndex(acc => acc && acc.id === newAccount.id);
-        
-        if (existingIndex >= 0) {
-          // Cập nhật tài khoản đã tồn tại
-          accounts[existingIndex] = {
-            ...accounts[existingIndex],
-            userInfo: newAccount.userInfo,
-            oauthConfig: newAccount.oauthConfig,
-            updatedAt: new Date().toISOString()
-          };
-        } else {
-          // Thêm tài khoản mới
-          accounts.push(newAccount);
-        }
-        
-        // Lưu vào tất cả các key
-        for (const key of ACCOUNTS_KEYS) {
-          storage.setItem(key, JSON.stringify(accounts));
-        }
-        
-        // Lưu ID tài khoản hiện tại
-        for (const key of CURRENT_ACCOUNT_KEYS) {
-          storage.setItem(key, newAccount.id);
-        }
-        
-        console.log('Đã lưu danh sách tài khoản và ID hiện tại:', accounts);
-        return true;
       } catch (error) {
-        console.error('Lỗi khi lưu tài khoản vào storage:', error);
+        console.error('Lỗi khi đọc danh sách tài khoản:', error);
+        accounts = [];
+      }
+      
+      console.log('Danh sách tài khoản trước khi cập nhật:', accounts);
+      
+      // Kiểm tra xem tài khoản đã tồn tại chưa
+      const existingIndex = accounts.findIndex(acc => acc && acc.id === newAccount.id);
+      
+      if (existingIndex >= 0) {
+        // Cập nhật tài khoản đã tồn tại
+        console.log('Cập nhật tài khoản tại vị trí:', existingIndex);
+        accounts[existingIndex] = {
+          ...accounts[existingIndex],
+          userInfo: newAccount.userInfo,
+          oauthConfig: newAccount.oauthConfig,
+          updatedAt: new Date().toISOString()
+        };
+      } else {
+        // Thêm tài khoản mới
+        console.log('Thêm tài khoản mới vào danh sách');
+        accounts.push(newAccount);
+      }
+      
+      console.log('Danh sách tài khoản sau khi cập nhật:', accounts);
+      
+      // Lưu vào tất cả các key
+      const accountsJSON = JSON.stringify(accounts);
+      console.log('Chuỗi JSON để lưu:', accountsJSON);
+      
+      // Lưu với key chính và key dự phòng
+      localStorage.setItem('hanet_accounts_direct', accountsJSON);
+      localStorage.setItem('hanet_accounts_v2', accountsJSON);
+      localStorage.setItem('hanet_accounts', accountsJSON);
+      
+      // Lưu ID tài khoản hiện tại
+      localStorage.setItem('hanet_current_account_direct', newAccount.id);
+      localStorage.setItem('hanet_current_account_id_v2', newAccount.id);
+      localStorage.setItem('hanet_current_account_id', newAccount.id);
+      
+      console.log('Đã lưu danh sách tài khoản và ID hiện tại vào localStorage');
+      return true;
+    } catch (error) {
+      console.error('Lỗi khi lưu tài khoản:', error);
+      
+      // Thử lại với cách đơn giản hơn
+      try {
+        // Lưu trực tiếp thông tin người dùng
+        localStorage.setItem('user_info', JSON.stringify(userInfo));
+        
+        // Tạo mảng tài khoản đơn giản
+        const simpleAccount = {
+          id: userInfo.username,
+          name: userInfo.name || userInfo.username,
+          email: userInfo.email
+        };
+        
+        localStorage.setItem('hanet_accounts', JSON.stringify([simpleAccount]));
+        localStorage.setItem('hanet_current_account_id', simpleAccount.id);
+        
+        console.log('Đã lưu thông tin đơn giản vào localStorage');
+        return true;
+      } catch (backupError) {
+        console.error('Lỗi khi lưu dự phòng:', backupError);
         return false;
       }
-    };
-    
-    // Thử lưu vào localStorage
-    const localStorageWorking = checkStorage('localStorage');
-    let saved = false;
-    
-    if (localStorageWorking) {
-      saved = saveToStorage(localStorage);
-      console.log('Kết quả lưu vào localStorage:', saved);
     }
-    
-    // Nếu lưu vào localStorage thất bại hoặc không khả dụng, thử lưu vào sessionStorage
-    if (!saved) {
-      const sessionStorageWorking = checkStorage('sessionStorage');
-      if (sessionStorageWorking) {
-        saved = saveToStorage(sessionStorage);
-        console.log('Kết quả lưu vào sessionStorage:', saved);
-      }
-    }
-    
-    // Lưu thông tin người dùng trực tiếp
-    try {
-      if (localStorageWorking) {
-        localStorage.setItem('user_info', JSON.stringify(userInfo));
-      } else {
-        sessionStorage.setItem('user_info', JSON.stringify(userInfo));
-      }
-    } catch (error) {
-      console.error('Lỗi khi lưu user_info:', error);
-      try {
-        sessionStorage.setItem('user_info', JSON.stringify(userInfo));
-      } catch (e) {
-        console.error('Không thể lưu user_info vào cả localStorage và sessionStorage');
-      }
-    }
-    
-    // Lưu OAuth config
-    try {
-      if (localStorageWorking) {
-        localStorage.setItem('hanet_oauth_config', JSON.stringify(oauthConfig));
-      } else {
-        sessionStorage.setItem('hanet_oauth_config', JSON.stringify(oauthConfig));
-      }
-    } catch (error) {
-      console.error('Lỗi khi lưu oauth_config:', error);
-    }
-    
-    return saved;
   };
 
   const handleCallback = async () => {

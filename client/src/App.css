@@ -803,3 +803,77 @@ textarea:focus {
 .error-message button:hover {
   background-color: #0069d9;
 }
+
+/* CSS cho các nút trong menu tài khoản */
+.refresh-button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #666;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  padding: 0;
+  transition: background-color 0.2s;
+}
+
+.refresh-button:hover {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.account-menu-footer {
+  padding: 10px 16px;
+  border-top: 1px solid #eee;
+  font-size: 12px;
+  color: #888;
+}
+
+.menu-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.debug-link {
+  color: #666;
+  text-decoration: none;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.debug-link:hover {
+  text-decoration: underline;
+}
+
+.refresh-data-button {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: #0066cc;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.refresh-data-button:hover {
+  text-decoration: underline;
+}
+
+.create-account-button {
+  margin-top: 10px;
+  background-color: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.create-account-button:hover {
+  background-color: #004c99;
+}
