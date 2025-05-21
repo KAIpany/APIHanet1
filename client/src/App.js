@@ -700,6 +700,88 @@ const CheckInApp = () => {
     }
   };
 
+  // Tạo tài khoản từ cấu hình OAuth (khi không có user_info)
+  const createAccountFromOAuthConfig = () => {
+    console.log('Thử tạo tài khoản từ cấu hình OAuth');
+    
+    try {
+      // Lấy cấu hình OAuth
+      const oauthConfigRaw = localStorage.getItem('hanet_oauth_config');
+      if (!oauthConfigRaw) {
+        console.error('Không có cấu hình OAuth để tạo tài khoản');
+        return false;
+      }
+      
+      const oauthConfig = JSON.parse(oauthConfigRaw);
+      console.log('Đã đọc cấu hình OAuth:', oauthConfig);
+      
+      // Tạo ID tài khoản từ thông tin có sẵn
+      const accountId = 'hanet_user_' + new Date().getTime();
+      
+      // Tạo tài khoản mới
+      const newAccount = {
+        id: accountId,
+        name: 'Người dùng Hanet',
+        createdAt: new Date().toISOString(),
+        oauthConfig: oauthConfig
+      };
+      
+      console.log('Tạo tài khoản mới:', newAccount);
+      
+      // Lấy danh sách tài khoản hiện tại
+      let accounts = [];
+      const rawAccounts = localStorage.getItem('hanet_accounts_direct') || 
+                         localStorage.getItem('hanet_accounts_v2') || 
+                         localStorage.getItem('hanet_accounts');
+      
+      if (rawAccounts) {
+        try {
+          accounts = JSON.parse(rawAccounts);
+          if (!Array.isArray(accounts)) {
+            console.log('Dữ liệu tài khoản không phải mảng, khởi tạo mới');
+            accounts = [];
+          }
+        } catch (e) {
+          console.error('Lỗi khi phân tích dữ liệu tài khoản:', e);
+          accounts = [];
+        }
+      }
+      
+      // Thêm tài khoản mới
+      accounts.push(newAccount);
+      
+      // Lưu danh sách tài khoản
+      const accountsJSON = JSON.stringify(accounts);
+      localStorage.setItem('hanet_accounts_direct', accountsJSON);
+      localStorage.setItem('hanet_accounts_v2', accountsJSON);
+      localStorage.setItem('hanet_accounts', accountsJSON);
+      
+      // Lưu ID tài khoản hiện tại
+      localStorage.setItem('hanet_current_account_direct', accountId);
+      localStorage.setItem('hanet_current_account_id_v2', accountId);
+      localStorage.setItem('hanet_current_account_id', accountId);
+      
+      // Tạo user_info đơn giản
+      const simpleUserInfo = {
+        username: accountId,
+        name: 'Người dùng Hanet'
+      };
+      
+      // Lưu user_info
+      localStorage.setItem('user_info', JSON.stringify(simpleUserInfo));
+      
+      // Cập nhật state
+      setUserInfo(simpleUserInfo);
+      setAccounts(accounts);
+      
+      console.log('Đã hoàn thành việc tạo tài khoản từ cấu hình OAuth');
+      return true;
+    } catch (error) {
+      console.error('Lỗi khi tạo tài khoản từ cấu hình OAuth:', error);
+      return false;
+    }
+  };
+
   // Tạo tài khoản từ thông tin người dùng hiện tại
   const createAccountFromUserInfo = () => {
     console.log('Tạo tài khoản từ thông tin người dùng hiện tại');
@@ -792,6 +874,17 @@ const CheckInApp = () => {
       return false;
     }
   };
+  
+  // Thử tạo tài khoản từ cả hai phương thức
+  const tryCreateAccount = () => {
+    // Thử tạo từ thông tin người dùng trước
+    if (createAccountFromUserInfo()) {
+      return true;
+    }
+    
+    // Nếu không có thông tin người dùng, thử tạo từ cấu hình OAuth
+    return createAccountFromOAuthConfig();
+  };
 
   // Phần hiển thị menu tài khoản
   const renderAccountMenu = () => {
@@ -807,7 +900,7 @@ const CheckInApp = () => {
             className="refresh-button"
             onClick={(e) => {
               e.stopPropagation();
-              createAccountFromUserInfo();
+              tryCreateAccount();
             }}
             title="Làm mới tài khoản"
           >
@@ -867,10 +960,10 @@ const CheckInApp = () => {
                   className="create-account-button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    createAccountFromUserInfo();
+                    tryCreateAccount();
                   }}
                 >
-                  Tạo tài khoản từ người dùng hiện tại
+                  Tạo tài khoản mới
                 </button>
               </div>
             </div>
@@ -916,10 +1009,10 @@ const CheckInApp = () => {
             // Khi mở menu, kiểm tra và tạo tài khoản nếu cần
             console.log('Mở menu tài khoản');
             
-            // Nếu không có tài khoản nào, thử tạo từ thông tin người dùng
+            // Nếu không có tài khoản nào, thử tạo tài khoản
             if (!accounts || accounts.length === 0) {
-              console.log('Chưa có tài khoản, thử tạo từ thông tin người dùng');
-              createAccountFromUserInfo();
+              console.log('Chưa có tài khoản, thử tạo tài khoản');
+              tryCreateAccount();
             }
             
             setShowAccountMenu(!showAccountMenu);
