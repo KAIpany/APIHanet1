@@ -1,186 +1,363 @@
 import React, { useState, useEffect } from 'react';
-import * as AccountManager from './accountManager';
 import { Link } from 'react-router-dom';
 import './OAuthConfig.css';
+
+const STORAGE_KEY = 'hanet_oauth_config';
 
 const OAuthConfig = () => {
   const [config, setConfig] = useState({
     clientId: '',
+    clientSecret: '',
+    refreshToken: '',
+    baseUrl: 'https://partner.hanet.ai',
+    tokenUrl: 'https://oauth.hanet.com/token',
+    appName: '',
     redirectUri: '',
-    accessTokenUrl: '',
-    authUrl: '',
-    appName: ''
+    userInfoUrl: ''
   });
-  const [errorText, setErrorText] = useState('');
+  const [status, setStatus] = useState({
+    loading: true,
+    message: 'Đang tải cấu hình...',
+    status: 'loading',
+    error: null
+  });
 
+  // Lấy cấu hình từ local storage khi component mount
   useEffect(() => {
-    // Tải cấu hình từ localStorage nếu có
-    try {
-      // Lấy thông tin từ tài khoản hiện tại
-      const oauthConfig = AccountManager.getOAuthConfig();
-      
-      if (oauthConfig) {
-        console.log('Đã tải cấu hình OAuth:', oauthConfig);
-        setConfig({
-          clientId: oauthConfig.clientId || '',
-          redirectUri: oauthConfig.redirectUri || '',
-          accessTokenUrl: oauthConfig.accessTokenUrl || '',
-          authUrl: oauthConfig.authUrl || '',
-          appName: oauthConfig.appName || ''
-        });
-      } else {
-        console.log('Không có cấu hình OAuth, sử dụng cấu hình mặc định');
-        
-        // Tạo redirectUri mặc định
-        const origin = window.location.origin;
-        const redirectUri = `${origin}/callback`;
-        
-        setConfig({
-          clientId: '',
-          redirectUri: redirectUri,
-          accessTokenUrl: 'https://oauth.hanet.com/token',
-          authUrl: 'https://oauth.hanet.com/authorize',
-          appName: ''
-        });
+    // Luôn load từ localStorage trước
+    const savedConfig = localStorage.getItem(STORAGE_KEY);
+    if (savedConfig) {
+      try {
+        const parsedConfig = JSON.parse(savedConfig);
+        console.log('Đã tải cấu hình từ localStorage:', parsedConfig);
+        setConfig(prevConfig => ({
+          ...prevConfig,
+          ...parsedConfig,
+          // Đảm bảo hiển thị đầy đủ thông tin
+          clientId: parsedConfig.clientId || '',
+          clientSecret: parsedConfig.clientSecret || '',
+          refreshToken: parsedConfig.refreshToken || '',
+          appName: parsedConfig.appName || '',
+          redirectUri: parsedConfig.redirectUri || '',
+          userInfoUrl: parsedConfig.userInfoUrl || ''
+        }));
+      } catch (error) {
+        console.error('Lỗi khi đọc cấu hình từ local storage:', error);
       }
-    } catch (error) {
-      console.error("Lỗi khi đọc cấu hình từ localStorage:", error);
     }
+    
+    // Sau đó mới gọi API để kiểm tra trạng thái
+    checkAuthStatus();
+    
+    // Cuối cùng mới fetch cấu hình từ server
+    fetchConfig();
   }, []);
 
-  const handleChange = (e) => {
-    setConfig({ ...config, [e.target.name]: e.target.value });
+  // Lấy cấu hình từ server
+  const fetchConfig = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/config`);
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        // Lấy giá trị từ localStorage, ưu tiên dữ liệu này
+        const savedConfig = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        
+        // Chỉ sử dụng giá trị từ API nếu không có trong localStorage
+        const newConfig = {
+          // Ưu tiên giá trị từ localStorage, nếu không có mới lấy từ API
+          clientId: savedConfig.clientId || result.data.clientId || '',
+          clientSecret: savedConfig.clientSecret || '',
+          refreshToken: savedConfig.refreshToken || '',
+          baseUrl: savedConfig.baseUrl || result.data.baseUrl || 'https://partner.hanet.ai',
+          tokenUrl: savedConfig.tokenUrl || result.data.tokenUrl || 'https://oauth.hanet.com/token',
+          appName: savedConfig.appName || result.data.appName || '',
+          redirectUri: savedConfig.redirectUri || '',
+          userInfoUrl: savedConfig.userInfoUrl || ''
+        };
+        
+        console.log('Cấu hình từ localStorage:', savedConfig);
+        console.log('Cấu hình sau khi merge với server:', newConfig);
+        
+        setConfig(newConfig);
+        
+        setStatus({
+          loading: false,
+          message: 'Đã tải cấu hình',
+          status: 'loaded',
+          error: null
+        });
+      } else {
+        throw new Error(result.message || 'Không thể tải cấu hình');
+      }
+    } catch (error) {
+      console.error('Lỗi khi tải cấu hình:', error);
+      
+      // Nếu không kết nối được server, vẫn tải từ localStorage
+      const savedConfig = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      if (savedConfig.clientId) {
+        console.log('Sử dụng cấu hình từ localStorage do không kết nối được server');
+        setConfig(savedConfig);
+        setStatus({
+          loading: false,
+          message: 'Đã tải cấu hình từ lưu trữ cục bộ',
+          status: 'loaded',
+          error: null
+        });
+      } else {
+        setStatus({
+          loading: false,
+          message: 'Lỗi tải cấu hình',
+          status: 'error',
+          error: error.message
+        });
+      }
+    }
   };
 
-  const initiateOAuth = () => {
+  // Kiểm tra trạng thái xác thực
+  const checkAuthStatus = async () => {
     try {
-      // Kiểm tra các giá trị bắt buộc
-      if (!config.clientId) {
-        setErrorText('Client ID là bắt buộc');
-        return;
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/status`);
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        setStatus(prevStatus => ({
+          ...prevStatus,
+          authStatus: result.data.status,
+          authMessage: result.data.message
+        }));
       }
-      setErrorText('');
-
-      // Tạo redirectUri
-      const origin = window.location.origin;
-      const redirectUri = config.redirectUri || `${origin}/callback`;
-      
-      // Tạo URL thông tin người dùng
-      const userInfoUrl = 'https://oauth.hanet.com/userInfo';
-
-      // Tạo cấu hình OAuth hoàn chỉnh
-      const oauthConfig = {
-        ...config,
-        redirectUri: redirectUri,
-        userInfoUrl: userInfoUrl
-      };
-      
-      // Lưu cấu hình vào localStorage
-      AccountManager.setOAuthConfig(oauthConfig);
-
-      // Tạo URL xác thực
-      const scope = 'basic';
-      const responseType = 'code';
-      const authUrl = `${config.authUrl}?client_id=${config.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=${responseType}&scope=${scope}`;
-
-      // Mở cửa sổ đăng nhập
-      window.open(authUrl, '_self');
     } catch (error) {
-      console.error('Lỗi khi khởi tạo OAuth:', error);
-      setErrorText(`Lỗi: ${error.message}`);
+      console.error("Lỗi kiểm tra trạng thái xác thực:", error);
     }
+  };
+
+  // Lưu cấu hình
+  const saveConfig = async () => {
+    try {
+      setStatus({
+        ...status,
+        loading: true,
+        message: 'Đang lưu cấu hình...'
+      });
+
+      // Lưu đầy đủ các thông tin vào local storage trước
+      // để đảm bảo dữ liệu không bị mất ngay cả khi API gặp lỗi
+      const configToSave = {
+        clientId: config.clientId, 
+        clientSecret: config.clientSecret,
+        refreshToken: config.refreshToken,
+        baseUrl: config.baseUrl,
+        tokenUrl: config.tokenUrl,
+        appName: config.appName,
+        redirectUri: config.redirectUri,
+        userInfoUrl: config.userInfoUrl
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(configToSave));
+      console.log('Đã lưu cấu hình vào localStorage:', configToSave);
+
+      // Sau đó gửi lên server
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(config)
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setStatus({
+          loading: false,
+          message: 'Đã lưu cấu hình thành công',
+          status: 'success',
+          error: null
+        });
+        
+        // Kiểm tra lại trạng thái xác thực
+        checkAuthStatus();
+      } else {
+        throw new Error(result.message || 'Không thể lưu cấu hình');
+      }
+    } catch (error) {
+      console.error('Lỗi khi lưu cấu hình:', error);
+      setStatus({
+        loading: false,
+        message: 'Lỗi khi gửi cấu hình lên server, nhưng đã lưu cục bộ',
+        status: 'warning',
+        error: error.message
+      });
+    }
+  };
+
+  // Khởi tạo quá trình đăng nhập OAuth
+  const initiateOAuth = () => {
+    if (!config.clientId) {
+      setStatus({
+        ...status,
+        status: 'error',
+        message: 'Vui lòng nhập Client ID trước khi đăng nhập',
+        error: 'Thiếu Client ID'
+      });
+      return;
+    }
+
+    // Tạo URL redirect
+    const redirectUri = `${window.location.origin}/oauth-callback`;
+    
+    // Lưu redirectUri vào cấu hình để sử dụng sau này
+    const updatedConfig = {
+      ...config,
+      redirectUri: redirectUri,
+      userInfoUrl: `${config.baseUrl}/api/user/info`
+    };
+    
+    // Lưu cấu hình cập nhật
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedConfig));
+    
+    // Cập nhật state
+    setConfig(updatedConfig);
+    
+    // URL xác thực Hanet OAuth2
+    const authUrl = `https://oauth.hanet.com/oauth2/authorize?response_type=code&client_id=${config.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=full`;
+    
+    // Mở cửa sổ đăng nhập mới
+    window.open(authUrl, 'hanetOAuth', 'width=600,height=700');
+  };
+
+  const handleChange = (e) => {
+    setConfig({
+      ...config,
+      [e.target.name]: e.target.value
+    });
   };
 
   return (
-    <div className="oauth-config-container">
-      <h2>Cấu hình OAuth</h2>
+    <div className="oauth-config">
+      <div className="config-header">
+        <h2>Cấu hình Xác thực Hanet API</h2>
+        <Link to="/" className="home-button">
+          Quay về trang chủ
+        </Link>
+      </div>
+      
+      {status.error && (
+        <div className="error-message">
+          <p>{status.error}</p>
+        </div>
+      )}
+      
+      {status.authStatus && (
+        <div className={`auth-status ${status.authStatus}`}>
+          <p>Trạng thái xác thực: {status.authMessage}</p>
+        </div>
+      )}
+      
       <div className="config-form">
         <div className="form-group">
-          <label htmlFor="appName">Tên ứng dụng</label>
+          <label htmlFor="appName">Tên ứng dụng:</label>
           <input
             type="text"
             id="appName"
             name="appName"
             value={config.appName}
             onChange={handleChange}
-            placeholder="Nhập tên ứng dụng (tùy chọn)"
+            placeholder="Nhập tên ứng dụng của bạn"
           />
-          <div className="help-text">
-            Tên ứng dụng sẽ hiển thị cùng với tài khoản
-          </div>
+          <small>* Tên này sẽ được hiển thị khi chọn tài khoản</small>
         </div>
-
+        
         <div className="form-group">
-          <label htmlFor="clientId">Client ID</label>
+          <label htmlFor="clientId">Client ID:</label>
           <input
             type="text"
             id="clientId"
             name="clientId"
             value={config.clientId}
             onChange={handleChange}
-            placeholder="Nhập Client ID"
-            required
+            placeholder="Nhập Client ID của bạn"
           />
-          <div className="help-text">
-            Client ID được cung cấp bởi Hanet
-          </div>
         </div>
-
+        
         <div className="form-group">
-          <label htmlFor="authUrl">Auth URL</label>
+          <label htmlFor="clientSecret">Client Secret:</label>
+          <input
+            type="password"
+            id="clientSecret"
+            name="clientSecret"
+            value={config.clientSecret}
+            onChange={handleChange}
+            placeholder="Nhập Client Secret của bạn"
+          />
+          <small>* Client Secret sẽ không được hiển thị sau khi lưu</small>
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="refreshToken">Refresh Token (tùy chọn):</label>
+          <input
+            type="password"
+            id="refreshToken"
+            name="refreshToken"
+            value={config.refreshToken}
+            onChange={handleChange}
+            placeholder="Nhập Refresh Token nếu có"
+          />
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="baseUrl">API Base URL:</label>
           <input
             type="text"
-            id="authUrl"
-            name="authUrl"
-            value={config.authUrl}
+            id="baseUrl"
+            name="baseUrl"
+            value={config.baseUrl}
             onChange={handleChange}
-            placeholder="Nhập Auth URL"
+            placeholder="URL cơ sở của API"
           />
-          <div className="help-text">
-            Đường dẫn yêu cầu xác thực (mặc định: https://oauth.hanet.com/authorize)
-          </div>
         </div>
-
+        
         <div className="form-group">
-          <label htmlFor="accessTokenUrl">Access Token URL</label>
+          <label htmlFor="tokenUrl">Token URL:</label>
           <input
             type="text"
-            id="accessTokenUrl"
-            name="accessTokenUrl"
-            value={config.accessTokenUrl}
+            id="tokenUrl"
+            name="tokenUrl"
+            value={config.tokenUrl}
             onChange={handleChange}
-            placeholder="Nhập Access Token URL"
+            placeholder="URL token OAuth"
           />
-          <div className="help-text">
-            Đường dẫn lấy token (mặc định: https://oauth.hanet.com/token)
-          </div>
+          <small>* Thông thường là https://oauth.hanet.com/token</small>
         </div>
-
-        <div className="form-group">
-          <label htmlFor="redirectUri">Redirect URI</label>
-          <input
-            type="text"
-            id="redirectUri"
-            name="redirectUri"
-            value={config.redirectUri}
-            onChange={handleChange}
-            placeholder="Nhập Redirect URI"
-          />
-          <div className="help-text">
-            URL đích sau khi xác thực (mặc định: {window.location.origin}/callback)
-          </div>
-        </div>
-
-        {errorText && <div className="error-message">{errorText}</div>}
-
-        <div className="form-actions">
-          <button onClick={initiateOAuth} className="login-button">
-            Đăng nhập
+        
+        <div className="button-group">
+          <button 
+            className="save-button"
+            onClick={saveConfig}
+            disabled={status.loading}
+          >
+            {status.loading ? 'Đang lưu...' : 'Lưu cấu hình'}
           </button>
-          <Link to="/" className="cancel-button">
-            Quay lại
-          </Link>
+          
+          <button 
+            className="oauth-button"
+            onClick={initiateOAuth}
+            disabled={!config.clientId || status.loading}
+          >
+            Đăng nhập với Hanet
+          </button>
         </div>
+      </div>
+      
+      <div className="oauth-info">
+        <h3>Hướng dẫn</h3>
+        <ol>
+          <li>Nhập <strong>Client ID</strong> và <strong>Client Secret</strong> từ tài khoản Hanet của bạn</li>
+          <li>Nhấn <strong>Lưu cấu hình</strong> để lưu thông tin</li>
+          <li>Nhấn <strong>Đăng nhập với Hanet</strong> để xác thực</li>
+          <li>Sau khi xác thực, hệ thống sẽ tự động lưu trữ token</li>
+        </ol>
       </div>
     </div>
   );
