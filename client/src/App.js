@@ -8,39 +8,102 @@ import "./App.css";
 // Thêm một trang Debug để xem thông tin localStorage
 const DebugPage = () => {
   const [storageItems, setStorageItems] = useState({});
+  const [cookiesInfo, setCookiesInfo] = useState('');
+  const [browserInfo, setBrowserInfo] = useState('');
   
   useEffect(() => {
     // Lấy tất cả các mục từ localStorage
     const items = {};
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      try {
-        const value = localStorage.getItem(key);
-        items[key] = {
-          raw: value,
-          parsed: JSON.parse(value)
-        };
-      } catch (e) {
-        items[key] = {
-          raw: localStorage.getItem(key),
-          error: 'Không thể parse JSON'
-        };
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        try {
+          const value = localStorage.getItem(key);
+          items[key] = {
+            raw: value,
+            parsed: JSON.parse(value)
+          };
+        } catch (e) {
+          items[key] = {
+            raw: localStorage.getItem(key),
+            error: 'Không thể parse JSON'
+          };
+        }
       }
+    } catch (e) {
+      console.error('Lỗi khi lấy từ localStorage:', e);
+      items['localStorage_error'] = {
+        raw: e.toString(),
+        error: 'Không thể truy cập localStorage'
+      };
     }
     setStorageItems(items);
+    
+    // Lấy thông tin cookies
+    setCookiesInfo(document.cookie || 'Không có cookies');
+    
+    // Lấy thông tin trình duyệt
+    const info = {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      language: navigator.language,
+      cookiesEnabled: navigator.cookieEnabled,
+      localStorage: typeof localStorage !== 'undefined',
+      origin: window.location.origin,
+      href: window.location.href
+    };
+    setBrowserInfo(JSON.stringify(info, null, 2));
   }, []);
   
   const clearAllStorage = () => {
     if (window.confirm('Bạn có chắc chắn muốn xóa tất cả dữ liệu localStorage?')) {
-      localStorage.clear();
-      window.location.reload();
+      try {
+        localStorage.clear();
+        window.location.reload();
+      } catch (e) {
+        alert('Lỗi khi xóa localStorage: ' + e.toString());
+      }
+    }
+  };
+  
+  const clearAllCookies = () => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa tất cả cookies?')) {
+      try {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i];
+          const eqPos = cookie.indexOf('=');
+          const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+          document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+        }
+        alert('Đã xóa tất cả cookies');
+        window.location.reload();
+      } catch (e) {
+        alert('Lỗi khi xóa cookies: ' + e.toString());
+      }
     }
   };
   
   const removeItem = (key) => {
     if (window.confirm(`Bạn có chắc chắn muốn xóa "${key}"?`)) {
-      localStorage.removeItem(key);
-      window.location.reload();
+      try {
+        localStorage.removeItem(key);
+        window.location.reload();
+      } catch (e) {
+        alert('Lỗi khi xóa item: ' + e.toString());
+      }
+    }
+  };
+  
+  const testLocalStorage = () => {
+    try {
+      const testKey = '_test_' + Date.now();
+      localStorage.setItem(testKey, 'test');
+      const value = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+      alert('Kiểm tra localStorage: ' + (value === 'test' ? 'THÀNH CÔNG' : 'THẤT BẠI'));
+    } catch (e) {
+      alert('Lỗi khi kiểm tra localStorage: ' + e.toString());
     }
   };
   
@@ -48,11 +111,25 @@ const DebugPage = () => {
     <div className="debug-container">
       <div className="debug-header">
         <h1>Trang Debug</h1>
-        <Link to="/" className="back-button">Quay lại ứng dụng</Link>
-        <button onClick={clearAllStorage} className="clear-all-button">Xóa tất cả localStorage</button>
+        <div className="debug-actions">
+          <Link to="/" className="back-button">Quay lại ứng dụng</Link>
+          <button onClick={clearAllStorage} className="clear-button">Xóa tất cả localStorage</button>
+          <button onClick={clearAllCookies} className="clear-button danger">Xóa tất cả cookies</button>
+          <button onClick={testLocalStorage} className="test-button">Kiểm tra localStorage</button>
+        </div>
       </div>
       
-      <div className="storage-items">
+      <div className="debug-section">
+        <h2>Thông tin trình duyệt</h2>
+        <pre className="info-value">{browserInfo}</pre>
+      </div>
+      
+      <div className="debug-section">
+        <h2>Cookies</h2>
+        <pre className="info-value">{cookiesInfo}</pre>
+      </div>
+      
+      <div className="debug-section">
         <h2>Nội dung localStorage</h2>
         {Object.keys(storageItems).length === 0 ? (
           <div className="no-items">Không có dữ liệu</div>

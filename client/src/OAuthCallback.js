@@ -11,9 +11,28 @@ const OAuthCallback = () => {
   });
   const navigate = useNavigate();
 
+  // Hàm kiểm tra localStorage
+  const checkLocalStorage = () => {
+    try {
+      const testKey = '_test_oauth_' + Date.now();
+      localStorage.setItem(testKey, 'test');
+      const value = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+      return value === 'test';
+    } catch (e) {
+      console.error('Lỗi localStorage:', e);
+      return false;
+    }
+  };
+
   useEffect(() => {
     const handleCallback = async () => {
       try {
+        // Kiểm tra localStorage trước
+        if (!checkLocalStorage()) {
+          throw new Error('Trình duyệt không hỗ trợ hoặc đã chặn localStorage. Vui lòng kiểm tra cài đặt trình duyệt.');
+        }
+
         // Lấy code từ query string
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
@@ -44,27 +63,44 @@ const OAuthCallback = () => {
           if (userData.success) {
             // Lấy cấu hình hiện tại để lưu trữ
             const STORAGE_KEY = 'hanet_oauth_config';
-            const currentConfig = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-            console.log('Cấu hình OAuth hiện tại:', currentConfig);
-
-            // Cập nhật refresh token trong cấu hình nếu có
-            if (result.data && result.data.refreshToken) {
-              currentConfig.refreshToken = result.data.refreshToken;
-              console.log('Đã cập nhật refresh token');
+            try {
+              // Lưu cấu hình OAuth
+              const currentConfig = result.data || {};
+              console.log('Cấu hình OAuth hiện tại:', currentConfig);
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(currentConfig));
+            
+              // Lưu tài khoản mới hoặc cập nhật tài khoản hiện tại
+              console.log('Lưu tài khoản với thông tin:', userData.data);
+              const saveResult = saveAccount(userData.data, currentConfig);
+              console.log('Kết quả lưu tài khoản:', saveResult);
+              
+              if (!saveResult) {
+                console.warn('Có vấn đề khi lưu tài khoản trong accountManager, nhưng vẫn tiếp tục');
+              }
+              
+              // Vẫn giữ lại cách lưu cũ để tương thích ngược
+              localStorage.setItem('user_info', JSON.stringify(userData.data));
+              
+              console.log('Đã lưu tài khoản:', userData.data.username);
+              
+              // Kiểm tra xem đã lưu thành công chưa
+              const testUserInfo = localStorage.getItem('user_info');
+              const testConfig = localStorage.getItem(STORAGE_KEY);
+              if (!testUserInfo || !testConfig) {
+                throw new Error('Không thể lưu thông tin vào localStorage');
+              }
+            } catch (storageError) {
+              console.error('Lỗi khi lưu thông tin:', storageError);
+              setStatus({
+                message: 'Đã xác thực thành công nhưng không thể lưu thông tin',
+                error: 'Có vấn đề với localStorage: ' + storageError.message,
+                processing: false
+              });
+              return;
             }
-            
-            // Lưu tài khoản mới hoặc cập nhật tài khoản hiện tại
-            console.log('Lưu tài khoản với thông tin:', userData.data);
-            const saveResult = saveAccount(userData.data, currentConfig);
-            console.log('Kết quả lưu tài khoản:', saveResult);
-            
-            // Vẫn giữ lại cách lưu cũ để tương thích ngược
-            localStorage.setItem('user_info', JSON.stringify(userData.data));
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(currentConfig));
-            
-            console.log('Đã lưu tài khoản:', userData.data.username);
           } else {
             console.error('Failed to get user data:', userData);
+            throw new Error('Không thể lấy thông tin người dùng');
           }
           
           setStatus({

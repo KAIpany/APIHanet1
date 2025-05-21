@@ -511,7 +511,13 @@ textarea:focus {
   flex-grow: 1;
 }
 
-.back-button, .clear-all-button {
+.debug-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.back-button, .clear-button, .test-button {
   display: inline-block;
   padding: 8px 15px;
   border-radius: 4px;
@@ -525,8 +531,19 @@ textarea:focus {
   color: #444;
 }
 
-.clear-all-button {
+.clear-button {
   background-color: #ff5252;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.clear-button.danger {
+  background-color: #d32f2f;
+}
+
+.test-button {
+  background-color: #2196f3;
   color: white;
   border: none;
   cursor: pointer;
@@ -536,13 +553,37 @@ textarea:focus {
   background-color: #e0e0e0;
 }
 
-.clear-all-button:hover {
+.clear-button:hover {
   background-color: #ff3d3d;
 }
 
-.storage-items h2 {
+.clear-button.danger:hover {
+  background-color: #b71c1c;
+}
+
+.test-button:hover {
+  background-color: #1976d2;
+}
+
+.debug-section {
+  margin-bottom: 30px;
+}
+
+.debug-section h2 {
   margin-bottom: 20px;
   font-size: 18px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.info-value {
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 15px;
+  overflow-x: auto;
+  font-size: 14px;
+  margin: 0;
 }
 
 .storage-item {
