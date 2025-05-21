@@ -6,7 +6,8 @@ const OAuthConfig = () => {
     clientId: '',
     clientSecret: '',
     refreshToken: '',
-    baseUrl: 'https://partner.hanet.ai'
+    baseUrl: 'https://partner.hanet.ai',
+    tokenUrl: 'https://oauth.hanet.com/token'
   });
   const [status, setStatus] = useState({
     loading: true,
@@ -32,7 +33,8 @@ const OAuthConfig = () => {
           clientId: result.data.clientId || '',
           clientSecret: '',  // Không hiển thị client secret từ server
           refreshToken: '',  // Không hiển thị refresh token từ server
-          baseUrl: result.data.baseUrl || 'https://partner.hanet.ai'
+          baseUrl: result.data.baseUrl || 'https://partner.hanet.ai',
+          tokenUrl: result.data.tokenUrl || 'https://oauth.hanet.com/token'
         });
         setStatus({
           loading: false,
@@ -134,6 +136,7 @@ const OAuthConfig = () => {
 
     // Tạo URL redirect
     const redirectUri = `${window.location.origin}/oauth-callback`;
+    // URL xác thực Hanet (mặc định sử dụng baseUrl nhưng có thể cấu hình)
     const authUrl = `${config.baseUrl}/oauth2/authorize?client_id=${config.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code`;
     
     // Mở cửa sổ đăng nhập mới
@@ -211,6 +214,19 @@ const OAuthConfig = () => {
             onChange={handleChange}
             placeholder="URL cơ sở của API"
           />
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="tokenUrl">Token URL:</label>
+          <input
+            type="text"
+            id="tokenUrl"
+            name="tokenUrl"
+            value={config.tokenUrl}
+            onChange={handleChange}
+            placeholder="URL token OAuth"
+          />
+          <small>* Thông thường là https://oauth.hanet.com/token</small>
         </div>
         
         <div className="button-group">

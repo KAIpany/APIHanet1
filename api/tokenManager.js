@@ -35,6 +35,7 @@ function getCurrentConfig() {
     clientId: process.env.HANET_CLIENT_ID,
     clientSecret: process.env.HANET_CLIENT_SECRET,
     baseUrl: process.env.HANET_API_BASE_URL || "https://partner.hanet.ai",
+    tokenUrl: process.env.HANET_TOKEN_URL || "https://oauth.hanet.com/token"
   };
 }
 
@@ -58,7 +59,8 @@ async function getValidHanetToken() {
       throw new Error("Thiếu thông tin Client ID hoặc Client Secret");
     }
 
-    const url = `${config.baseUrl}/oauth2/token`;
+    // Sử dụng tokenUrl thay vì tạo URL từ baseUrl
+    const url = config.tokenUrl || "https://oauth.hanet.com/token";
     const data = {
       grant_type: "refresh_token",
       refresh_token: refreshToken,
@@ -118,7 +120,8 @@ async function exchangeCodeForToken(code, redirectUri) {
       throw new Error("Thiếu thông tin Client ID hoặc Client Secret");
     }
 
-    const url = `${config.baseUrl}/oauth2/token`;
+    // Sử dụng tokenUrl thay vì tạo URL từ baseUrl
+    const url = config.tokenUrl || "https://oauth.hanet.com/token";
     const data = {
       grant_type: "authorization_code",
       code: code,

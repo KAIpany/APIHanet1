@@ -177,7 +177,7 @@ app.get("/api/checkins", validateCheckinParams, async (req, res, next) => {
 // API cấu hình OAuth
 app.post("/api/oauth/config", (req, res) => {
   try {
-    const { clientId, clientSecret, refreshToken, baseUrl } = req.body;
+    const { clientId, clientSecret, refreshToken, baseUrl, tokenUrl } = req.body;
     
     if (!clientId || !clientSecret) {
       return res.status(400).json({
@@ -191,6 +191,7 @@ app.post("/api/oauth/config", (req, res) => {
       clientSecret,
       refreshToken: refreshToken || null,
       baseUrl: baseUrl || "https://partner.hanet.ai",
+      tokenUrl: tokenUrl || "https://oauth.hanet.com/token"
     };
     
     tokenManager.setDynamicConfig(config);
