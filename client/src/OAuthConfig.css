@@ -155,6 +155,12 @@ button:disabled {
   color: #b91c1c;
 }
 
+.auth-status.warning {
+  background-color: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
+}
+
 .oauth-info {
   background-color: #f9fafb;
   border: 1px solid #e5e5e5;
