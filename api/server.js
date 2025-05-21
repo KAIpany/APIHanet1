@@ -306,9 +306,11 @@ app.get("/api/oauth/status", async (req, res) => {
 // API lấy thông tin người dùng
 app.get("/api/user/info", async (req, res) => {
   try {
+    console.log("[USER INFO] Bắt đầu truy vấn thông tin người dùng");
     const token = await tokenManager.getValidHanetToken();
     const config = tokenManager.getCurrentConfig();
     
+    console.log(`[USER INFO] Gọi API Hanet: ${config.baseUrl}/api/v3/account/info`);
     const response = await fetch(`${config.baseUrl}/api/v3/account/info`, {
       headers: {
         'Authorization': `Bearer ${token}`
@@ -316,20 +318,26 @@ app.get("/api/user/info", async (req, res) => {
     });
     
     const userData = await response.json();
+    console.log("[USER INFO] Dữ liệu nhận được từ Hanet:", JSON.stringify(userData));
     
     if (userData.code === '1' && userData.data) {
+      const userInfo = {
+        username: userData.data.username,
+        name: userData.data.name || userData.data.username,
+        email: userData.data.email
+      };
+      console.log("[USER INFO] Dữ liệu trả về cho client:", JSON.stringify(userInfo));
+      
       return res.status(200).json({
         success: true,
-        data: {
-          username: userData.data.username,
-          name: userData.data.name || userData.data.username,
-          email: userData.data.email
-        }
+        data: userInfo
       });
     } else {
+      console.log("[USER INFO] Lỗi định dạng dữ liệu:", userData);
       throw new Error('Không thể lấy thông tin người dùng');
     }
   } catch (error) {
+    console.error("[USER INFO] Lỗi:", error.message);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi lấy thông tin người dùng: " + error.message

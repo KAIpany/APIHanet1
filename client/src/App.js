@@ -29,9 +29,13 @@ const CheckInApp = () => {
   useEffect(() => {
     // Load user info from localStorage
     const savedUserInfo = localStorage.getItem('user_info');
+    console.log('Saved user info from localStorage:', savedUserInfo);
+    
     if (savedUserInfo) {
       try {
-        setUserInfo(JSON.parse(savedUserInfo));
+        const parsedUserInfo = JSON.parse(savedUserInfo);
+        console.log('Parsed user info:', parsedUserInfo);
+        setUserInfo(parsedUserInfo);
       } catch (error) {
         console.error('Lỗi khi đọc thông tin người dùng:', error);
       }
@@ -248,9 +252,13 @@ const CheckInApp = () => {
   const renderMainApp = () => (
     <main className="container">
       <nav className="app-nav">
-        {userInfo && (
+        {userInfo ? (
           <div className="user-info">
-            <span className="welcome-text">Xin chào, {userInfo.name}</span>
+            <span className="welcome-text">Xin chào, {userInfo.name || 'Người dùng'}</span>
+          </div>
+        ) : (
+          <div className="user-info">
+            <span className="welcome-text">Xin chào</span>
           </div>
         )}
         <Link to="/config" className="config-button">

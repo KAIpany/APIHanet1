@@ -38,9 +38,18 @@ const OAuthCallback = () => {
           const userResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/user/info`);
           const userData = await userResponse.json();
           
+          console.log('Received user data:', userData);
+          
           if (userData.success) {
             // Lưu thông tin người dùng vào localStorage
+            console.log('Saving user info to localStorage:', userData.data);
             localStorage.setItem('user_info', JSON.stringify(userData.data));
+            
+            // Verify data was saved correctly
+            const savedData = localStorage.getItem('user_info');
+            console.log('Verified saved user info:', savedData);
+          } else {
+            console.error('Failed to get user data:', userData);
           }
           
           setStatus({
