@@ -34,6 +34,14 @@ const OAuthConfig = () => {
 
   // Lấy danh sách cấu hình và cấu hình đang active khi component mount
   useEffect(() => {
+    // Đặt trạng thái đang tải
+    setStatus({
+      loading: true,
+      message: 'Đang tải dữ liệu cấu hình...',
+      status: 'loading',
+      error: null
+    });
+    
     // Lấy danh sách cấu hình
     const configsList = localStorage.getItem(CONFIGS_LIST_KEY);
     let configNames = [];
@@ -47,48 +55,63 @@ const OAuthConfig = () => {
       }
     }
     
-    // Lấy tên cấu hình đang active
-    const currentActive = localStorage.getItem(ACTIVE_CONFIG_KEY);
-    
-    // Nếu có cấu hình active và nó nằm trong danh sách
-    if (currentActive && configNames.includes(currentActive)) {
-      setActiveConfig(currentActive);
-      loadConfigByName(currentActive);
-    } 
-    // Nếu không có cấu hình active nhưng có cấu hình cũ
-    else {
-      // Kiểm tra xem có cấu hình cũ (legacy) không
-      const legacyConfig = localStorage.getItem(STORAGE_KEY);
-      if (legacyConfig) {
-        try {
-          const parsedConfig = JSON.parse(legacyConfig);
-          console.log('Đã tải cấu hình legacy từ localStorage:', parsedConfig);
-          setConfig(prevConfig => ({
-            ...prevConfig,
-            ...parsedConfig,
-            clientId: parsedConfig.clientId || '',
-            clientSecret: parsedConfig.clientSecret || '',
-            refreshToken: parsedConfig.refreshToken || '',
-            appName: parsedConfig.appName || '',
-            redirectUri: parsedConfig.redirectUri || '',
-            userInfoUrl: parsedConfig.userInfoUrl || ''
-          }));
-          
-          // Nếu có appName, lưu cấu hình này với tên đó
-          if (parsedConfig.appName) {
-            setConfigName(parsedConfig.appName);
+    setTimeout(() => {
+      // Lấy tên cấu hình đang active
+      const currentActive = localStorage.getItem(ACTIVE_CONFIG_KEY);
+      
+      // Nếu có cấu hình active và nó nằm trong danh sách
+      if (currentActive && configNames.includes(currentActive)) {
+        console.log(`Đang tải cấu hình active: ${currentActive}`);
+        loadConfigByName(currentActive);
+      } 
+      // Nếu không có cấu hình active nhưng có cấu hình cũ
+      else {
+        // Kiểm tra xem có cấu hình cũ (legacy) không
+        const legacyConfig = localStorage.getItem(STORAGE_KEY);
+        if (legacyConfig) {
+          try {
+            const parsedConfig = JSON.parse(legacyConfig);
+            console.log('Đã tải cấu hình legacy từ localStorage:', parsedConfig);
+            
+            // Cập nhật cấu hình vào state
+            setConfig({
+              clientId: parsedConfig.clientId || '',
+              clientSecret: parsedConfig.clientSecret || '',
+              refreshToken: parsedConfig.refreshToken || '',
+              baseUrl: parsedConfig.baseUrl || 'https://partner.hanet.ai',
+              tokenUrl: parsedConfig.tokenUrl || 'https://oauth.hanet.com/token',
+              appName: parsedConfig.appName || '',
+              redirectUri: parsedConfig.redirectUri || '',
+              userInfoUrl: parsedConfig.userInfoUrl || ''
+            });
+            
+            // Nếu có appName, lưu cấu hình này với tên đó
+            if (parsedConfig.appName) {
+              setConfigName(parsedConfig.appName);
+            }
+            
+            // Cập nhật cấu hình lên server
+            updateServerConfig(parsedConfig).catch(error => {
+              console.error('Lỗi khi cập nhật cấu hình legacy lên server:', error);
+            });
+          } catch (error) {
+            console.error('Lỗi khi đọc cấu hình legacy từ local storage:', error);
           }
-        } catch (error) {
-          console.error('Lỗi khi đọc cấu hình legacy từ local storage:', error);
         }
+        
+        // Cuối cùng kiểm tra trạng thái xác thực và cập nhật status
+        checkAuthStatus().finally(() => {
+          setStatus(prevStatus => ({
+            ...prevStatus,
+            loading: false,
+            status: 'loaded'
+          }));
+        });
       }
-    }
-    
-    // Sau đó mới gọi API để kiểm tra trạng thái
-    checkAuthStatus();
-    
-    // Cuối cùng mới fetch cấu hình từ server
-    fetchConfig();
+      
+      // Cuối cùng mới fetch cấu hình từ server
+      fetchConfig();
+    }, 500); // Thêm delay nhỏ để đảm bảo component đã render đầy đủ
   }, []);
 
   // Lấy cấu hình từ server
@@ -155,20 +178,43 @@ const OAuthConfig = () => {
 
   // Kiểm tra trạng thái xác thực
   const checkAuthStatus = async () => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/status`);
-      const result = await response.json();
-      
-      if (result.success && result.data) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Thêm timeout để tránh hàm bị treo
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 giây timeout
+        
+        console.log('Đang kiểm tra trạng thái xác thực...');
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/status`, {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+          console.log('Trạng thái xác thực:', result.data);
+          setStatus(prevStatus => ({
+            ...prevStatus,
+            authStatus: result.data.status,
+            authMessage: result.data.message
+          }));
+          resolve(result.data);
+        } else {
+          console.error('Lỗi từ API kiểm tra trạng thái:', result);
+          reject(new Error(result.message || 'Lỗi không xác định khi kiểm tra trạng thái'));
+        }
+      } catch (error) {
+        console.error("Lỗi kiểm tra trạng thái xác thực:", error);
         setStatus(prevStatus => ({
           ...prevStatus,
-          authStatus: result.data.status,
-          authMessage: result.data.message
+          authStatus: 'error',
+          authMessage: `Lỗi kiểm tra trạng thái: ${error.message}`
         }));
+        reject(error);
       }
-    } catch (error) {
-      console.error("Lỗi kiểm tra trạng thái xác thực:", error);
-    }
+    });
   };
 
   // Load cấu hình theo tên
@@ -181,31 +227,53 @@ const OAuthConfig = () => {
         const parsedConfig = JSON.parse(savedConfig);
         console.log(`Đã tải cấu hình '${name}' từ localStorage:`, parsedConfig);
         
-        setConfig(prevConfig => ({
-          ...prevConfig,
-          ...parsedConfig,
-          clientId: parsedConfig.clientId || '',
-          clientSecret: parsedConfig.clientSecret || '',
-          refreshToken: parsedConfig.refreshToken || '',
-          baseUrl: parsedConfig.baseUrl || 'https://partner.hanet.ai',
-          tokenUrl: parsedConfig.tokenUrl || 'https://oauth.hanet.com/token',
-          appName: parsedConfig.appName || '',
-          redirectUri: parsedConfig.redirectUri || '',
-          userInfoUrl: parsedConfig.userInfoUrl || ''
-        }));
-        
-        setActiveConfig(name);
-        localStorage.setItem(ACTIVE_CONFIG_KEY, name);
-        
+        // Đặt trạng thái tải trước khi tải cấu hình
         setStatus({
-          loading: false,
-          message: `Đã tải cấu hình '${name}'`,
-          status: 'success',
+          loading: true,
+          message: `Đang tải cấu hình '${name}'...`,
+          status: 'loading',
           error: null
         });
         
-        // Cập nhật cấu hình lên server
-        updateServerConfig(parsedConfig);
+        // Set activeConfig trước để tránh lỗi khi chuyển đổi
+        setActiveConfig(name);
+        localStorage.setItem(ACTIVE_CONFIG_KEY, name);
+        
+        // Cập nhật cấu hình lên server trước, sau đó mới cập nhật UI
+        updateServerConfig(parsedConfig).then(() => {
+          // Sau khi cập nhật server xong mới cập nhật state
+          setConfig({
+            clientId: parsedConfig.clientId || '',
+            clientSecret: parsedConfig.clientSecret || '',
+            refreshToken: parsedConfig.refreshToken || '',
+            baseUrl: parsedConfig.baseUrl || 'https://partner.hanet.ai',
+            tokenUrl: parsedConfig.tokenUrl || 'https://oauth.hanet.com/token',
+            appName: parsedConfig.appName || '',
+            redirectUri: parsedConfig.redirectUri || '',
+            userInfoUrl: parsedConfig.userInfoUrl || ''
+          });
+          
+          // Đặt tên cấu hình để dễ quản lý
+          setConfigName(name);
+          
+          setStatus({
+            loading: false,
+            message: `Đã tải cấu hình '${name}'`,
+            status: 'success',
+            error: null
+          });
+          
+          // Cập nhật trạng thái xác thực sau khi đã cập nhật cấu hình
+          checkAuthStatus();
+        }).catch(error => {
+          console.error(`Lỗi khi cập nhật cấu hình '${name}' lên server:`, error);
+          setStatus({
+            loading: false,
+            message: `Đã tải cấu hình '${name}' nhưng không cập nhật được lên server`,
+            status: 'warning',
+            error: error.message
+          });
+        });
       }
     } catch (error) {
       console.error(`Lỗi khi tải cấu hình '${name}':`, error);
@@ -220,23 +288,45 @@ const OAuthConfig = () => {
   
   // Cập nhật cấu hình lên server
   const updateServerConfig = async (configData) => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/config`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(configData)
-      });
-      
-      const result = await response.json();
-      if (result.success) {
-        console.log('Đã cập nhật cấu hình lên server');
-        checkAuthStatus();
+    // Đảm bảo hàm trả về Promise để có thể xử lý then/catch
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Thêm timeout để đảm bảo có đủ thời gian để cập nhật
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 giây timeout
+        
+        console.log('Gửi cấu hình lên server:', {
+          clientId: configData.clientId,
+          hasClientSecret: !!configData.clientSecret,
+          hasRefreshToken: !!configData.refreshToken,
+          baseUrl: configData.baseUrl,
+          tokenUrl: configData.tokenUrl
+        });
+        
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/config`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(configData),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        const result = await response.json();
+        if (result.success) {
+          console.log('Đã cập nhật cấu hình lên server thành công');
+          resolve(result);
+        } else {
+          console.error('Server trả về lỗi:', result.message);
+          reject(new Error(result.message || 'Lỗi không xác định từ server'));
+        }
+      } catch (error) {
+        console.error('Lỗi khi cập nhật cấu hình lên server:', error);
+        reject(error);
       }
-    } catch (error) {
-      console.error('Lỗi khi cập nhật cấu hình lên server:', error);
-    }
+    });
   };
 
   // Lưu cấu hình mới
