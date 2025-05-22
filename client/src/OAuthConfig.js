@@ -656,7 +656,7 @@ const OAuthConfig = () => {
         </div>
         
         <div className="form-group">
-          <label htmlFor="refreshToken">Refresh Token (tùy chọn):</label>
+          <label htmlFor="refreshToken">Refresh Token:</label>
           <input
             type="password"
             id="refreshToken"

@@ -1311,7 +1311,45 @@ const CheckInApp = () => {
     <main className="container">
       <nav className="app-nav">
         <div className="user-info">
-          <span className="welcome-text">Anycross</span>
+          <span className="welcome-text">
+            {(() => {
+              // Hiển thị tên ứng dụng từ cấu hình OAuth hiện tại
+              try {
+                // Nếu có cấu hình OAuth active, hiển thị tên cấu hình đó
+                if (activeOauthConfig) {
+                  return activeOauthConfig;
+                }
+                
+                // Nếu không có cấu hình active, thử lấy từ tài khoản hiện tại
+                const currentAccount = accounts.find(acc => {
+                  const currentId = localStorage.getItem('hanet_current_account_direct') || 
+                                   localStorage.getItem('hanet_current_account_id_v2') || 
+                                   localStorage.getItem('hanet_current_account_id');
+                  return acc.id === currentId;
+                });
+                
+                if (currentAccount && currentAccount.appName) {
+                  return currentAccount.appName;
+                }
+                
+                // Nếu không có trong tài khoản, thử lấy từ cấu hình OAuth trực tiếp
+                const configKey = localStorage.getItem('hanet_current_oauth_config_key') || 'hanet_oauth_config';
+                const configData = localStorage.getItem(configKey);
+                if (configData) {
+                  const config = JSON.parse(configData);
+                  if (config && config.appName) {
+                    return config.appName;
+                  }
+                }
+                
+                // Mặc định
+                return "Hanet API";
+              } catch (e) {
+                console.error('Lỗi khi hiển thị tên ứng dụng:', e);
+                return "Hanet API";
+              }
+            })()} 
+          </span>
         </div>
 
         <div className="account-section" ref={accountMenuRef}>
