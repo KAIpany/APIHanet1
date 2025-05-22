@@ -8,6 +8,8 @@ const CONFIGS_LIST_KEY = 'hanet_oauth_configs_list';
 const ACTIVE_CONFIG_KEY = 'hanet_oauth_active_config';
 // Lưu trữ một cấu hình cụ thể (sẽ có prefix + name)
 const CONFIG_PREFIX = 'hanet_oauth_config_';
+// Legacy storage key, giữ lại để tương thích ngược
+const STORAGE_KEY = 'hanet_oauth_config';
 
 const OAuthConfig = () => {
   const [config, setConfig] = useState({
