@@ -255,6 +255,8 @@ const CheckInApp = () => {
   const [accounts, setAccounts] = useState([]);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef(null);
+  const [oauthConfigs, setOauthConfigs] = useState([]);
+  const [activeOauthConfig, setActiveOauthConfig] = useState('');
 
   // Kiểm tra trạng thái xác thực khi load component
   useEffect(() => {
@@ -266,6 +268,9 @@ const CheckInApp = () => {
       const key = localStorage.key(i);
       console.log(`- ${key}`);
     }
+    
+    // Load OAuth configs
+    loadOAuthConfigs();
     
     // Load user info from localStorage
     const savedUserInfo = localStorage.getItem('user_info');
@@ -412,6 +417,89 @@ const CheckInApp = () => {
         console.error('Lỗi khi lưu vào sessionStorage:', error);
         return false;
       }
+    }
+  };
+
+  // Load OAuth configs from localStorage
+  const loadOAuthConfigs = () => {
+    try {
+      const CONFIGS_LIST_KEY = 'hanet_oauth_configs_list';
+      const ACTIVE_CONFIG_KEY = 'hanet_oauth_active_config';
+      const CONFIG_PREFIX = 'hanet_oauth_config_';
+      
+      // Get list of configs
+      const configsList = localStorage.getItem(CONFIGS_LIST_KEY);
+      let configNames = [];
+      if (configsList) {
+        try {
+          configNames = JSON.parse(configsList);
+          console.log('Đã tải danh sách cấu hình OAuth:', configNames);
+          
+          // Get active config
+          const activeConfig = localStorage.getItem(ACTIVE_CONFIG_KEY) || '';
+          setActiveOauthConfig(activeConfig);
+          
+          // Set configs to state
+          setOauthConfigs(configNames);
+        } catch (error) {
+          console.error('Lỗi khi đọc danh sách cấu hình OAuth từ local storage:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Lỗi khi tải cấu hình OAuth:', error);
+    }
+  };
+  
+  // Handle OAuth config selection
+  const handleOAuthConfigSelect = (configName) => {
+    try {
+      const CONFIG_PREFIX = 'hanet_oauth_config_';
+      const ACTIVE_CONFIG_KEY = 'hanet_oauth_active_config';
+      
+      console.log(`Chuyển sang cấu hình OAuth: ${configName}`);
+      
+      // Set as active config
+      localStorage.setItem(ACTIVE_CONFIG_KEY, configName);
+      setActiveOauthConfig(configName);
+      
+      // Load the config data
+      const savedConfig = localStorage.getItem(CONFIG_PREFIX + configName);
+      if (savedConfig) {
+        const parsedConfig = JSON.parse(savedConfig);
+        
+        // Set the OAuth config to localStorage for compatibility
+        localStorage.setItem('hanet_oauth_config', JSON.stringify(parsedConfig));
+        
+        // Update the server with this config
+        fetch(`${process.env.REACT_APP_API_URL}/api/oauth/config`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(parsedConfig)
+        }).then(response => {
+          console.log('Đã cập nhật cấu hình lên server');
+          
+          // Check auth status
+          checkAuthStatus();
+          
+          // Close menu
+          setShowAccountMenu(false);
+          
+          // Reload to apply changes
+          window.location.reload();
+        }).catch(error => {
+          console.error('Lỗi khi cập nhật cấu hình lên server:', error);
+          alert('Đã chuyển đổi cấu hình nhưng không cập nhật được lên server');
+          
+          // Still close menu and reload
+          setShowAccountMenu(false);
+          window.location.reload();
+        });
+      }
+    } catch (error) {
+      console.error('Lỗi khi chuyển đổi cấu hình OAuth:', error);
+      alert('Không thể chuyển đổi cấu hình: ' + error.message);
     }
   };
 
@@ -1056,6 +1144,32 @@ const CheckInApp = () => {
             </div>
           )}
         </div>
+        {/* Display OAuth Configurations Section */}
+        {oauthConfigs.length > 0 && (
+          <div className="oauth-configs-section">
+            <h3 className="section-title">Cấu hình API đã lưu</h3>
+            <div className="oauth-configs-list">
+              {oauthConfigs.map(configName => (
+                <div 
+                  key={configName} 
+                  className={`oauth-config-item ${activeOauthConfig === configName ? 'active' : ''}`}
+                  onClick={() => handleOAuthConfigSelect(configName)}
+                >
+                  <div className="oauth-config-icon">
+                    <i className="fas fa-cog"></i>
+                  </div>
+                  <div className="oauth-config-name">
+                    {configName}
+                    {activeOauthConfig === configName && (
+                      <span className="active-badge">Đang dùng</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
         <div className="account-menu-footer">
           <div className="storage-info">
             ID: {localStorage.getItem('hanet_current_account_direct') || 

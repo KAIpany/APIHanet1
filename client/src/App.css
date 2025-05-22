@@ -899,6 +899,73 @@ textarea:focus {
 }
 
 /* CSS cho phần tạo tài khoản mới */
+/* OAuth Configurations Section */
+.oauth-configs-section {
+  margin-top: 12px;
+  padding: 12px 0;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+}
+
+.oauth-configs-section .section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 8px;
+  padding-left: 12px;
+}
+
+.oauth-configs-list {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.oauth-config-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.oauth-config-item:hover {
+  background-color: #f5f5f5;
+}
+
+.oauth-config-item.active {
+  background-color: #e6f7ff;
+}
+
+.oauth-config-icon {
+  width: 24px;
+  height: 24px;
+  background-color: #4f46e5;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 10px;
+  font-size: 12px;
+}
+
+.oauth-config-name {
+  flex: 1;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.active-badge {
+  background-color: #52c41a;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 8px;
+}
+
 .add-account-section {
   margin-top: 12px;
   padding-top: 12px;
