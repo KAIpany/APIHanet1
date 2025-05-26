@@ -770,19 +770,14 @@ const CheckInApp = () => {
     setSubmitError(null);
     setSuccessMessage(null);
     setResultsData(null);
-
-    const params = new URLSearchParams();
-    if (formData.placeId) params.append("placeId", formData.placeId);
-    if (formData.deviceId) params.append("deviceId", formData.deviceId);
-    try {
-      if (formData.fromDateTime) {
-        params.append(
-          "dateFrom",
-          new Date(formData.fromDateTime).getTime().toString()
-        );
-      } else {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+    setQueryString(null);
+    
+    const {
+      placeId,
+      deviceId,
+      fromDateTime,
+      toDateTime,
+    } = formData;
 
     if (!placeId) {
       setSubmitError("Vui lòng chọn địa điểm.");
