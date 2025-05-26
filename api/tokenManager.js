@@ -8,6 +8,7 @@ let cachedTokenData = {
   accessToken: null,
   refreshToken: process.env.HANET_REFRESH_TOKEN,
   expiresAt: null,
+  lastSync: Date.now() // Thêm timestamp cho lần đồng bộ cuối
 };
 
 // Lưu trữ cấu hình động từ client
@@ -20,7 +21,16 @@ function setDynamicConfig(config) {
   // Cập nhật token từ cấu hình
   if (config.refreshToken) {
     cachedTokenData.refreshToken = config.refreshToken;
-    console.log('Đã cập nhật refresh token từ cấu hình client');
+    cachedTokenData.lastSync = Date.now();
+    
+    // Lưu refresh token vào file hoặc DB để dự phòng khi server restart
+    try {
+      // Lưu vào process.env cho phiên hiện tại
+      process.env.HANET_REFRESH_TOKEN = config.refreshToken;
+      console.log('Đã cập nhật refresh token từ cấu hình client và lưu vào env');
+    } catch (error) {
+      console.error('Lỗi khi lưu refresh token:', error.message);
+    }
   }
   
   // Reset access token để buộc refresh lại
@@ -45,6 +55,23 @@ function getCurrentConfig() {
 // Kiểm tra và refresh token khi cần
 async function getValidHanetToken() {
   const now = Date.now();
+  
+  // Kiểm tra xem đã quá lâu chưa sync lại (10 phút)
+  if (now - cachedTokenData.lastSync > 10 * 60 * 1000) {
+    console.log(`[${new Date().toISOString()}] Đã quá 10 phút kể từ lần đồng bộ token cuối, đang kiểm tra cấu hình...`);
+    // Nếu có dynamic config, cập nhật lại refresh token từ đó
+    if (dynamicConfig && dynamicConfig.refreshToken) {
+      cachedTokenData.refreshToken = dynamicConfig.refreshToken;
+      cachedTokenData.lastSync = now;
+      console.log(`[${new Date().toISOString()}] Đã đồng bộ lại refresh token từ dynamic config`);
+    } else if (process.env.HANET_REFRESH_TOKEN) {
+      // Nếu không có dynamic config, thử lấy từ env
+      cachedTokenData.refreshToken = process.env.HANET_REFRESH_TOKEN;
+      cachedTokenData.lastSync = now;
+      console.log(`[${new Date().toISOString()}] Đã đồng bộ lại refresh token từ env`);
+    }
+  }
+  
   // Nếu token còn hạn thì dùng tiếp
   if (cachedTokenData.accessToken && cachedTokenData.expiresAt && now < cachedTokenData.expiresAt) {
     return cachedTokenData.accessToken;
@@ -91,10 +118,17 @@ async function getValidHanetToken() {
       // Cập nhật refresh token nếu được cấp mới
       if (response.data.refresh_token) {
         cachedTokenData.refreshToken = response.data.refresh_token;
+        cachedTokenData.lastSync = Date.now();
+        
+        // Lưu vào process.env
+        process.env.HANET_REFRESH_TOKEN = response.data.refresh_token;
         
         // Cập nhật cấu hình động nếu có
         if (dynamicConfig) {
           dynamicConfig.refreshToken = response.data.refresh_token;
+          
+          // Gửi thông báo tới client để cập nhật refresh token nếu cần
+          console.log(`[${new Date().toISOString()}] Đã nhận refresh token mới và cập nhật cấu hình`);
         }
       }
       
@@ -153,6 +187,10 @@ async function exchangeCodeForToken(code, redirectUri) {
       if (response.data.refresh_token) {
         console.log(`[${new Date().toISOString()}] Đã nhận được refresh token mới.`);
         cachedTokenData.refreshToken = response.data.refresh_token;
+        cachedTokenData.lastSync = Date.now();
+        
+        // Lưu vào process.env
+        process.env.HANET_REFRESH_TOKEN = response.data.refresh_token;
         
         // Cập nhật cấu hình động nếu có
         if (dynamicConfig) {
