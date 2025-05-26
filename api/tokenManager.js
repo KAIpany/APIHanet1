@@ -2,14 +2,41 @@
 require("dotenv").config();
 const axios = require("axios");
 const qs = require("qs");
+const tokenStorage = require("./tokenStorage");
 
 // Lưu trữ thông tin token hiện tại
 let cachedTokenData = {
   accessToken: null,
-  refreshToken: process.env.HANET_REFRESH_TOKEN,
+  refreshToken: null,
   expiresAt: null,
-  lastSync: Date.now() // Thêm timestamp cho lần đồng bộ cuối
+  lastSync: Date.now() // Timestamp cho lần đồng bộ cuối
 };
+
+// Khởi tạo và tải token từ storage
+const initializeTokens = () => {
+  // Thử đọc từ file storage trước
+  const storedTokens = tokenStorage.loadTokens();
+  
+  if (storedTokens && storedTokens.refreshToken) {
+    console.log(`[${new Date().toISOString()}] Tải refresh token từ file storage`);
+    cachedTokenData.refreshToken = storedTokens.refreshToken;
+    cachedTokenData.accessToken = storedTokens.accessToken || null;
+    cachedTokenData.expiresAt = storedTokens.expiresAt || null;
+    cachedTokenData.lastSync = Date.now();
+  } else if (process.env.HANET_REFRESH_TOKEN) {
+    // Nếu không có trong file, dùng từ biến môi trường
+    console.log(`[${new Date().toISOString()}] Tải refresh token từ biến môi trường`);
+    cachedTokenData.refreshToken = process.env.HANET_REFRESH_TOKEN;
+    cachedTokenData.lastSync = Date.now();
+    // Lưu ngay vào storage
+    tokenStorage.saveTokens(cachedTokenData);
+  } else {
+    console.log(`[${new Date().toISOString()}] Không tìm thấy refresh token đã lưu trữ`);
+  }
+};
+
+// Khởi tạo khi module được load
+initializeTokens();
 
 // Lưu trữ cấu hình động từ client
 let dynamicConfig = null;
@@ -23,13 +50,27 @@ function setDynamicConfig(config) {
     cachedTokenData.refreshToken = config.refreshToken;
     cachedTokenData.lastSync = Date.now();
     
-    // Lưu refresh token vào file hoặc DB để dự phòng khi server restart
+    // Lưu refresh token vào file để dự phòng khi server restart
     try {
       // Lưu vào process.env cho phiên hiện tại
       process.env.HANET_REFRESH_TOKEN = config.refreshToken;
-      console.log('Đã cập nhật refresh token từ cấu hình client và lưu vào env');
+      
+      // Lưu vào storage cho lưu trữ liên tục
+      tokenStorage.saveTokens({
+        refreshToken: config.refreshToken,
+        accessToken: cachedTokenData.accessToken,
+        expiresAt: cachedTokenData.expiresAt,
+        lastSync: cachedTokenData.lastSync
+      });
+      
+      // Nếu có tên cấu hình, lưu dưới tên đó
+      if (config.appName) {
+        tokenStorage.saveOAuthConfig(config.appName, config);
+      }
+      
+      console.log(`[${new Date().toISOString()}] Đã cập nhật và lưu trữ refresh token từ cấu hình client`);
     } catch (error) {
-      console.error('Lỗi khi lưu refresh token:', error.message);
+      console.error(`[${new Date().toISOString()}] Lỗi khi lưu refresh token:`, error.message);
     }
   }
   
@@ -58,14 +99,23 @@ async function getValidHanetToken() {
   
   // Kiểm tra xem đã quá lâu chưa sync lại (10 phút)
   if (now - cachedTokenData.lastSync > 10 * 60 * 1000) {
-    console.log(`[${new Date().toISOString()}] Đã quá 10 phút kể từ lần đồng bộ token cuối, đang kiểm tra cấu hình...`);
+    console.log(`[${new Date().toISOString()}] Đã quá 10 phút kể từ lần đồng bộ token cuối, đang kiểm tra lưu trữ...`);
+    
+    // Thử tải lại từ storage trước tiên
+    const storedTokens = tokenStorage.loadTokens();
+    if (storedTokens && storedTokens.refreshToken) {
+      cachedTokenData.refreshToken = storedTokens.refreshToken;
+      cachedTokenData.lastSync = now;
+      console.log(`[${new Date().toISOString()}] Đã đồng bộ lại refresh token từ storage`);
+    }
     // Nếu có dynamic config, cập nhật lại refresh token từ đó
-    if (dynamicConfig && dynamicConfig.refreshToken) {
+    else if (dynamicConfig && dynamicConfig.refreshToken) {
       cachedTokenData.refreshToken = dynamicConfig.refreshToken;
       cachedTokenData.lastSync = now;
       console.log(`[${new Date().toISOString()}] Đã đồng bộ lại refresh token từ dynamic config`);
-    } else if (process.env.HANET_REFRESH_TOKEN) {
-      // Nếu không có dynamic config, thử lấy từ env
+    } 
+    // Nếu không có dynamic config, thử lấy từ env
+    else if (process.env.HANET_REFRESH_TOKEN) {
       cachedTokenData.refreshToken = process.env.HANET_REFRESH_TOKEN;
       cachedTokenData.lastSync = now;
       console.log(`[${new Date().toISOString()}] Đã đồng bộ lại refresh token từ env`);
@@ -123,9 +173,22 @@ async function getValidHanetToken() {
         // Lưu vào process.env
         process.env.HANET_REFRESH_TOKEN = response.data.refresh_token;
         
+        // Lưu vào storage cho lưu trữ liên tục
+        tokenStorage.saveTokens({
+          refreshToken: response.data.refresh_token,
+          accessToken: cachedTokenData.accessToken,
+          expiresAt: cachedTokenData.expiresAt,
+          lastSync: cachedTokenData.lastSync
+        });
+        
         // Cập nhật cấu hình động nếu có
         if (dynamicConfig) {
           dynamicConfig.refreshToken = response.data.refresh_token;
+          
+          // Nếu có tên app, lưu cấu hình vào storage
+          if (dynamicConfig.appName) {
+            tokenStorage.saveOAuthConfig(dynamicConfig.appName, dynamicConfig);
+          }
           
           // Gửi thông báo tới client để cập nhật refresh token nếu cần
           console.log(`[${new Date().toISOString()}] Đã nhận refresh token mới và cập nhật cấu hình`);
@@ -192,9 +255,23 @@ async function exchangeCodeForToken(code, redirectUri) {
         // Lưu vào process.env
         process.env.HANET_REFRESH_TOKEN = response.data.refresh_token;
         
+        // Lưu vào storage cho lưu trữ liên tục
+        tokenStorage.saveTokens({
+          refreshToken: response.data.refresh_token,
+          accessToken: response.data.access_token,
+          expiresIn: response.data.expires_in,
+          expiresAt: Date.now() + (response.data.expires_in * 1000),
+          lastSync: cachedTokenData.lastSync
+        });
+        
         // Cập nhật cấu hình động nếu có
         if (dynamicConfig) {
           dynamicConfig.refreshToken = response.data.refresh_token;
+          
+          // Nếu có tên app, lưu cấu hình vào storage
+          if (dynamicConfig.appName) {
+            tokenStorage.saveOAuthConfig(dynamicConfig.appName, dynamicConfig);
+          }
         }
       }
       
