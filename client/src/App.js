@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { BrowserRouter, Routes, Route, Link, Navigate } from "react-router-dom";
+import apiService from "./apiService";
 import OAuthConfig from "./OAuthConfig";
 import OAuthCallback from "./OAuthCallback";
 import { getAccounts, getCurrentAccount, setCurrentAccount, deleteAccount } from "./directAccountManager";
@@ -369,23 +370,48 @@ const CheckInApp = () => {
   }, []);
 
   // Kiểm tra trạng thái xác thực
-  const checkAuthStatus = async () => {
+  const checkAuthStatus = async (forceRefresh = false) => {
     try {
       // Lấy khóa cấu hình OAuth hiện tại
       const currentOAuthConfigKey = localStorage.getItem('hanet_current_oauth_config_key') || 'hanet_oauth_config';
       console.log('Khóa cấu hình OAuth hiện tại:', currentOAuthConfigKey);
       
-      // Sử dụng API để kiểm tra trạng thái
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/status`);
-      const result = await response.json();
+      // Sử dụng apiService để kiểm tra trạng thái
+      const authResult = await apiService.checkAuthStatus(forceRefresh);
       
-      if (result.success && result.data) {
-        setAuthStatus(result.data.status);
+      if (authResult) {
+        setAuthStatus(authResult.status);
+        
+        // Nếu không được xác thực và yêu cầu làm mới, thử làm mới
+        if (authResult.status !== 'authenticated' && forceRefresh) {
+          console.log('Thử tự động làm mới xác thực...');
+          const refreshed = await apiService.refreshAuthentication();
+          if (refreshed) {
+            // Nếu làm mới thành công, cập nhật trạng thái
+            console.log('Làm mới xác thực thành công');
+            setAuthStatus('authenticated');
+          } else {
+            console.log('Làm mới xác thực không thành công');
+          }
+        }
       }
     } catch (error) {
       console.error("Lỗi kiểm tra trạng thái xác thực:", error);
     }
   };
+
+  // Thêm timer để kiểm tra trạng thái xác thực định kỳ
+  useEffect(() => {
+    // Kiểm tra lần đầu và thử làm mới nếu cần
+    checkAuthStatus(true);
+    
+    // Kiểm tra định kỳ mỗi 5 phút
+    const interval = setInterval(() => {
+      checkAuthStatus(true);
+    }, 5 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Lưu ID tài khoản hiện tại vào storage
   const saveCurrentAccountId = (accountId) => {
@@ -635,26 +661,22 @@ const CheckInApp = () => {
   const fetchPlaces = useCallback(async () => {
     setIsPlacesLoading(true);
     setPlaceError(null);
+    setPlaces([]);
     try {
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/place`
-      );
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          `Lỗi ${response.status}: ${
-            errorData.message || "Không thể lấy danh sách địa điểm."
-          }`
-        );
-      }
-      const result = await response.json();
+      // Sử dụng apiService để lấy danh sách địa điểm với tự động làm mới xác thực
+      const result = await apiService.getPlaces();
       if (result.success && Array.isArray(result.data)) {
         setPlaces(result.data);
       } else {
         throw new Error("Dữ liệu địa điểm trả về không hợp lệ.");
       }
     } catch (err) {
-      setPlaceError(err.message || "Lỗi khi tải địa điểm.");
+      // Kiểm tra nếu lỗi liên quan đến xác thực
+      if (err.message && err.message.includes('xác thực')) {
+        setPlaceError(`Lỗi xác thực: ${err.message}. Vui lòng vào trang cấu hình API để đăng nhập lại.`);
+      } else {
+        setPlaceError(err.message || "Lỗi khi tải địa điểm.");
+      }
       setPlaces([]);
     } finally {
       setIsPlacesLoading(false);
@@ -677,25 +699,20 @@ const CheckInApp = () => {
     setDeviceError(null);
     setDevices([]);
     try {
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/device?placeId=${selectedPlaceId}`
-      );
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          `Lỗi ${response.status}: ${
-            errorData.message || "Không thể lấy danh sách thiết bị."
-          }`
-        );
-      }
-      const result = await response.json();
+      // Sử dụng apiService để lấy danh sách thiết bị với tự động làm mới xác thực
+      const result = await apiService.getDevices(selectedPlaceId);
       if (result.success && Array.isArray(result.data)) {
         setDevices(result.data);
       } else {
         throw new Error("Dữ liệu thiết bị trả về không hợp lệ.");
       }
     } catch (err) {
-      setDeviceError(err.message || "Lỗi khi tải thiết bị.");
+      // Kiểm tra nếu lỗi liên quan đến xác thực
+      if (err.message && err.message.includes('xác thực')) {
+        setDeviceError(`Lỗi xác thực: ${err.message}. Vui lòng vào trang cấu hình API để đăng nhập lại.`);
+      } else {
+        setDeviceError(err.message || "Lỗi khi tải thiết bị.");
+      }
       setDevices([]);
     } finally {
       setIsDevicesLoading(false);
@@ -766,58 +783,60 @@ const CheckInApp = () => {
       } else {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        params.append("dateFrom", today.getTime().toString());
-      }
-      if (formData.toDateTime) {
-        params.append(
-          "dateTo",
-          new Date(formData.toDateTime).getTime().toString()
-        );
-      } else {
-        params.append("dateTo", new Date().getTime().toString());
-      }
-      if (
-        formData.fromDateTime &&
-        formData.toDateTime &&
-        new Date(formData.fromDateTime) > new Date(formData.toDateTime)
-      ) {
-        throw new Error(
-          "Thời gian bắt đầu không được lớn hơn thời gian kết thúc."
-        );
-      }
-    } catch (e) {
-      setSubmitError(e.message || "Định dạng ngày giờ không hợp lệ.");
+
+    if (!placeId) {
+      setSubmitError("Vui lòng chọn địa điểm.");
       setIsSubmitting(false);
       return;
     }
-    const queryString = params.toString();
-    setQueryString(queryString);
 
-    const apiUrl = `${process.env.REACT_APP_API_URL}/api/checkins?${queryString}`;
-    console.log("Đang gọi API:", apiUrl);
+    if (!fromDateTime || !toDateTime) {
+      setSubmitError("Vui lòng chọn thời gian bắt đầu và kết thúc.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const fromDate = new Date(fromDateTime);
+    const toDate = new Date(toDateTime);
+
+    if (fromDate > toDate) {
+      setSubmitError("Thời gian bắt đầu không được lớn hơn thời gian kết thúc.");
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
-      const response = await fetch(apiUrl);
-      const result = await response.json();
-      console.log(result);
+      const fromTimestamp = fromDate.getTime();
+      const toTimestamp = toDate.getTime();
 
-      if (!response.ok) {
-        throw new Error(
-          `Lỗi ${response.status}: ${result.message || "Không thể lấy dữ liệu"}`
-        );
+      let queryParams = `placeId=${placeId}&dateFrom=${fromTimestamp}&dateTo=${toTimestamp}`;
+      if (deviceId) {
+        queryParams += `&devices=${deviceId}`;
       }
+      setQueryString(queryParams);
+
+      // Sử dụng apiService để lấy dữ liệu check-in với tự động làm mới xác thực
+      const result = await apiService.getCheckins(placeId, fromDateTime, toDateTime, deviceId);
 
       if (Array.isArray(result)) {
+        if (result.length === 0) {
+          setSuccessMessage("Không có dữ liệu check-in trong khoảng thời gian đã chọn.");
+        } else {
+          setSuccessMessage(
+            `Đã tìm thấy ${result.length} bản ghi check-in.`
+          );
+        }
         setResultsData(result);
-        setSuccessMessage(`Tìm thấy ${result.length} kết quả.`);
       } else {
-        setResultsData([]);
-        setSuccessMessage(result.message || "Không tìm thấy kết quả nào.");
+        throw new Error("Dữ liệu check-in trả về không hợp lệ.");
       }
     } catch (err) {
-      console.error("Lỗi khi lấy dữ liệu:", err);
-      setSubmitError(err.message || "Đã xảy ra lỗi khi truy vấn.");
-      setResultsData(null);
+      // Kiểm tra nếu lỗi liên quan đến xác thực
+      if (err.message && err.message.includes('xác thực')) {
+        setSubmitError(`Lỗi xác thực: ${err.message}. Hệ thống đã thử tự động làm mới token nhưng không thành công. Vui lòng vào trang cấu hình API để xác thực lại.`);
+      } else {
+        setSubmitError(err.message || "Lỗi khi tải dữ liệu check-in.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -1162,6 +1181,26 @@ const CheckInApp = () => {
                     {configName}
                     {activeOauthConfig === configName && (
                       <span className="active-badge">Đang dùng</span>
+                    )}
+                  </div>
+                  <div className="auth-status-indicator">
+                    {authStatus === 'authenticated' ? (
+                      <span className="status-authenticated">Đã xác thực</span>
+                    ) : authStatus === 'pending' ? (
+                      <span className="status-pending">Đang xác thực...</span>
+                    ) : (
+                      <>
+                        <span className="status-unauthenticated">Chưa xác thực</span>
+                        <button 
+                          className="refresh-auth-button" 
+                          onClick={() => {
+                            checkAuthStatus(true);
+                          }}
+                          style={{ marginLeft: '10px', fontSize: '0.8em', padding: '2px 8px' }}
+                        >
+                          Làm mới xác thực
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
