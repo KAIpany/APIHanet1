@@ -40,16 +40,15 @@ function filterCheckinsByDay(data) {
       return timeA - timeB;
     });
 
-    // Nhóm các bản ghi theo personID và date để tạo danh sách check-in/check-out
-    const checksByPersonDay = {};
-
-    // Nhóm các bản ghi theo personID và date
-    validCheckins.forEach((check) => {
-      const date = check.date;
-      const personKey = `${date}_${check.personID}`;
-
-      if (!checksByPersonDay[personKey]) {
-        checksByPersonDay[personKey] = {
+    // Nhóm các bản ghi theo personID, date để xử lý từng nhóm
+    const groupedByPersonAndDay = {};
+    
+    validCheckins.forEach(check => {
+      const key = `${check.date}_${check.personID}`;
+      
+      if (!groupedByPersonAndDay[key]) {
+        groupedByPersonAndDay[key] = {
+          events: [],
           personInfo: {
             personName: check.personName !== undefined ? check.personName : "",
             personID: check.personID,
@@ -64,72 +63,78 @@ function filterCheckinsByDay(data) {
             deviceID: check.deviceID !== undefined ? check.deviceID : "",
             deviceName: check.deviceName !== undefined ? check.deviceName : "",
             date: check.date,
-          },
-          checkEvents: [] // Mảng chứa các sự kiện check-in của người này trong ngày
+          }
         };
       }
-
-      // Thêm sự kiện check-in mới
-      checksByPersonDay[personKey].checkEvents.push({
-        time: check.checkinTime,
-        formattedTime: formatTimestamp(check.checkinTime)
+      
+      // Thêm sự kiện với timestamp gốc
+      groupedByPersonAndDay[key].events.push({
+        timestamp: parseInt(check.checkinTime, 10),
+        formatted: formatTimestamp(check.checkinTime)
       });
     });
 
-    // Tạo cặp check-in/check-out từ danh sách các sự kiện
-    const results = [];
+    // Kết quả cuối cùng
+    const finalResults = [];
 
-    Object.keys(checksByPersonDay).forEach(personKey => {
-      const { personInfo, checkEvents } = checksByPersonDay[personKey];
+    // Xử lý từng nhóm (người, ngày) để tạo các bản ghi check-in/check-out
+    Object.keys(groupedByPersonAndDay).forEach(key => {
+      const { personInfo, events } = groupedByPersonAndDay[key];
       
-      // Sắp xếp sự kiện theo thời gian
-      checkEvents.sort((a, b) => parseInt(a.time) - parseInt(b.time));
+      // Sắp xếp các sự kiện theo thời gian tăng dần
+      events.sort((a, b) => a.timestamp - b.timestamp);
       
-      // Tạo các cặp check-in/check-out riêng biệt
-      for (let i = 0; i < checkEvents.length; i += 2) {
-        const checkinTime = checkEvents[i].time;
-        const formattedCheckinTime = checkEvents[i].formattedTime;
+      // Tạo các cặp check-in/check-out từ danh sách sự kiện
+      // Logic: nếu số lượng event lẻ, event cuối cùng sẽ không có check-out
+      for (let i = 0; i < events.length; i += 2) {
+        // Check-in luôn là event đầu tiên trong cặp
+        const checkinEvent = events[i];
         
-        // Check-out là sự kiện tiếp theo hoặc null nếu không có
-        const checkoutTime = i + 1 < checkEvents.length ? checkEvents[i + 1].time : null;
-        const formattedCheckoutTime = i + 1 < checkEvents.length ? checkEvents[i + 1].formattedTime : null;
+        // Check-out là event tiếp theo nếu có
+        const checkoutEvent = (i + 1 < events.length) ? events[i + 1] : null;
         
         // Tính thời gian làm việc
         let workingTime = "N/A";
-        if (checkinTime && checkoutTime) {
-          if (checkinTime === checkoutTime) {
+        
+        if (checkoutEvent) {
+          const durationMs = checkoutEvent.timestamp - checkinEvent.timestamp;
+          
+          if (durationMs === 0) {
+            // Nếu check-in và check-out cùng thời điểm
             workingTime = "0h 0m";
           } else {
-            const durationMinutes = (checkoutTime - checkinTime) / (1000 * 60);
+            // Tính thời gian làm việc theo phút
+            const durationMinutes = durationMs / (1000 * 60);
             const hours = Math.floor(durationMinutes / 60);
             const minutes = Math.floor(durationMinutes % 60);
             workingTime = `${hours}h ${minutes}m`;
           }
         }
         
-        results.push({
+        // Tạo bản ghi cho cặp check-in/check-out này
+        finalResults.push({
           ...personInfo,
-          checkinTime: checkinTime,
-          checkoutTime: checkoutTime,
-          formattedCheckinTime: formattedCheckinTime,
-          formattedCheckoutTime: formattedCheckoutTime,
+          checkinTime: checkinEvent.timestamp.toString(),
+          formattedCheckinTime: checkinEvent.formatted,
+          checkoutTime: checkoutEvent ? checkoutEvent.timestamp.toString() : null,
+          formattedCheckoutTime: checkoutEvent ? checkoutEvent.formatted : null,
           workingTime: workingTime
         });
       }
     });
-
+    
     // Sắp xếp kết quả theo ngày và thời gian check-in
-    results.sort((a, b) => {
-      // Sắp xếp theo ngày trước
-      if (a.date !== b.date) {
-        return a.date.localeCompare(b.date);
-      }
-      // Nếu cùng ngày, sắp xếp theo thời gian check-in
+    finalResults.sort((a, b) => {
+      // So sánh ngày trước
+      const dateComp = a.date.localeCompare(b.date);
+      if (dateComp !== 0) return dateComp;
+      
+      // Cùng ngày thì so sánh thời gian check-in
       return parseInt(a.checkinTime) - parseInt(b.checkinTime);
     });
 
-    console.log(`Kết quả cuối cùng: ${results.length} bản ghi đã được xử lý.`);
-    return results;
+    console.log(`Kết quả cuối cùng: ${finalResults.length} bản ghi đã được xử lý.`);
+    return finalResults;
   } catch (error) {
     console.error("Lỗi khi xử lý dữ liệu:", error);
     return [];
