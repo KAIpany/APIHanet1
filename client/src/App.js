@@ -1596,7 +1596,11 @@ const CheckInApp = () => {
                       {resultsData.map((result, index) => {
                         // Tính thời gian làm việc
                         let workingTime = '';
-                        if (result.checkinTime && result.checkoutTime) {
+                        if (result.workingTime) {
+                          // Sử dụng giá trị từ API nếu có
+                          workingTime = result.workingTime;
+                        } else if (result.checkinTime && result.checkoutTime) {
+                          // Tính toán nếu không có giá trị từ API
                           const duration = (result.checkoutTime - result.checkinTime) / (1000 * 60); // Convert to minutes
                           const hours = Math.floor(duration / 60);
                           const minutes = Math.floor(duration % 60);
@@ -1611,14 +1615,12 @@ const CheckInApp = () => {
                             <td>{result.aliasID || "N/A"}</td>
                             <td>{result.title || "N/A"}</td>
                             <td>
-                              {result.checkinTime
-                                ? new Date(result.checkinTime).toLocaleString("vi-VN")
-                                : "N/A"}
+                              {result.formattedCheckinTime || 
+                               (result.checkinTime ? new Date(result.checkinTime).toLocaleString("vi-VN") : "N/A")}
                             </td>
                             <td>
-                              {result.checkoutTime
-                                ? new Date(result.checkoutTime).toLocaleString("vi-VN")
-                                : "N/A"}
+                              {result.formattedCheckoutTime || 
+                               (result.checkoutTime ? new Date(result.checkoutTime).toLocaleString("vi-VN") : "N/A")}
                             </td>
                             <td>{workingTime || "N/A"}</td>
                           </tr>

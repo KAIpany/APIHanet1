@@ -1,43 +1,33 @@
 function filterCheckinsByDay(data) {
   try {
-    // Kiểm tra xem dữ liệu đầu vào có hợp lệ không
-    let validData = [];
-    
-    // Xử lý trường hợp data là mảng trực tiếp (khi gọi trực tiếp API)
-    if (Array.isArray(data)) {
-      console.log('Nhận dữ liệu dạng mảng trực tiếp');
-      validData = data;
-    }
-    // Xử lý trường hợp data có cấu trúc {data: [...]} (từ một số nguồn khác)
-    else if (data && data.data && Array.isArray(data.data)) {
-      console.log('Nhận dữ liệu dạng {data: [...]}');
-      validData = data.data;
-    } 
-    // Nếu không phải cả hai dạng trên, trả về mảng rỗng
-    else {
-      console.error("Dữ liệu đầu vào không hợp lệ!", typeof data, data);
+    // Kiểm tra dữ liệu đầu vào
+    if (!Array.isArray(data)) {
+      console.error("Dữ liệu đầu vào của filter không phải là mảng.");
       return [];
     }
-    
-    console.log(`Xử lý ${validData.length} bản ghi thô...`);
-    
-    // Lọc bỏ các bản ghi không hợp lệ
-    const validCheckins = validData.filter(
-      (item) =>
-        item.personID &&
-        item.personID !== "" &&
-        item.personName &&
-        item.personName !== ""
-    );
-    
-    console.log(`Sau khi lọc, còn lại ${validCheckins.length} bản ghi hợp lệ.`);
 
-    // Tạo một đối tượng tạm để theo dõi check-in và check-out của mỗi người theo ngày
+    // Khởi tạo đối tượng lưu trữ kết quả
     const checksByPerson = {};
 
-    // Sắp xếp các lần check theo thời gian
-    validCheckins.sort((a, b) => a.checkinTime - b.checkinTime);
+    // Lọc ra các bản ghi hợp lệ
+    const validCheckins = data.filter(
+      (check) =>
+        check.personID && check.checkinTime && check.personID.toString().trim() !== ""
+    );
 
+    // Xác định ngày cho mỗi bản ghi
+    validCheckins.forEach((check) => {
+      if (!check.date) {
+        // Tính toán ngày từ timestamp nếu không có sẵn
+        const checkDate = new Date(parseInt(check.checkinTime, 10));
+        // Format: YYYY-MM-DD
+        check.date = `${checkDate.getFullYear()}-${(checkDate.getMonth() + 1)
+          .toString()
+          .padStart(2, "0")}-${checkDate.getDate().toString().padStart(2, "0")}`;
+      }
+    });
+
+    // Group by person_id và date
     validCheckins.forEach((check) => {
       const date = check.date;
       const personKey = `${date}_${check.personID}`;
@@ -81,6 +71,12 @@ function filterCheckinsByDay(data) {
         // Nếu chỉ có một lần check, đặt checkout time là null
         record.checkoutTime = null;
         record.formattedCheckoutTime = null;
+      } else if (record.checkinTime && record.checkoutTime) {
+        // Tính thời gian làm việc nếu có cả checkin và checkout
+        const durationMinutes = (record.checkoutTime - record.checkinTime) / (1000 * 60);
+        const hours = Math.floor(durationMinutes / 60);
+        const minutes = Math.floor(durationMinutes % 60);
+        record.workingTime = `${hours}h ${minutes}m`;
       }
     });
 
@@ -96,11 +92,25 @@ function filterCheckinsByDay(data) {
 }
 
 function formatTimestamp(timestamp) {
-  const date = new Date(timestamp);
-  const hours = date.getHours().toString().padStart(2, "0");
-  const minutes = date.getMinutes().toString().padStart(2, "0");
-  const seconds = date.getSeconds().toString().padStart(2, "0");
-  return `${hours}:${minutes}:${seconds}`;
+  // Đảm bảo timestamp là số
+  const ts = parseInt(timestamp, 10);
+  
+  // Tạo đối tượng Date với timestamp
+  const date = new Date(ts);
+  
+  // Chuyển đổi sang múi giờ Việt Nam (UTC+7)
+  const vietnamTime = new Date(date.getTime() + 7 * 60 * 60 * 1000);
+  
+  // Format các thành phần thời gian
+  const hours = vietnamTime.getUTCHours().toString().padStart(2, "0");
+  const minutes = vietnamTime.getUTCMinutes().toString().padStart(2, "0");
+  const seconds = vietnamTime.getUTCSeconds().toString().padStart(2, "0");
+  const day = vietnamTime.getUTCDate().toString().padStart(2, "0");
+  const month = (vietnamTime.getUTCMonth() + 1).toString().padStart(2, "0");
+  const year = vietnamTime.getUTCFullYear();
+  
+  // Trả về định dạng: HH:MM:SS DD/MM/YYYY
+  return `${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
 }
 
 require("dotenv").config();
