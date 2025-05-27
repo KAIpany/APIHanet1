@@ -5,26 +5,42 @@ function filterCheckinsByDay(data) {
       console.error("Dữ liệu đầu vào của filter không phải là mảng.");
       return [];
     }
+    
+    console.log(`Đang xử lý ${data.length} bản ghi từ API Hanet...`);
 
     // Khởi tạo đối tượng lưu trữ kết quả
     const checksByPerson = {};
 
-    // Lọc ra các bản ghi hợp lệ
+    // Lọc ra các bản ghi hợp lệ - sử dụng filter lỏng lẻo hơn để không bỏ sót dữ liệu
     const validCheckins = data.filter(
-      (check) =>
-        check.personID && check.checkinTime && check.personID.toString().trim() !== ""
+      (check) => check && check.personID
     );
+    
+    console.log(`Sau khi lọc ban đầu, còn lại ${validCheckins.length} bản ghi hợp lệ.`);
 
-    // Xác định ngày cho mỗi bản ghi
+    // Xác định ngày cho mỗi bản ghi nếu chưa có
     validCheckins.forEach((check) => {
-      if (!check.date) {
+      if (!check.date && check.checkinTime) {
         // Tính toán ngày từ timestamp nếu không có sẵn
         const checkDate = new Date(parseInt(check.checkinTime, 10));
         // Format: YYYY-MM-DD
         check.date = `${checkDate.getFullYear()}-${(checkDate.getMonth() + 1)
           .toString()
           .padStart(2, "0")}-${checkDate.getDate().toString().padStart(2, "0")}`;
+      } else if (!check.date) {
+        // Nếu không có cả date và checkinTime, gán ngày hiện tại
+        const now = new Date();
+        check.date = `${now.getFullYear()}-${(now.getMonth() + 1)
+          .toString()
+          .padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")}`;
       }
+    });
+
+    // Sắp xếp các bản ghi theo thời gian tăng dần
+    validCheckins.sort((a, b) => {
+      const timeA = a.checkinTime ? parseInt(a.checkinTime, 10) : 0;
+      const timeB = b.checkinTime ? parseInt(b.checkinTime, 10) : 0;
+      return timeA - timeB;
     });
 
     // Group by person_id và date
@@ -71,19 +87,28 @@ function filterCheckinsByDay(data) {
         // Nếu chỉ có một lần check, đặt checkout time là null
         record.checkoutTime = null;
         record.formattedCheckoutTime = null;
+        record.workingTime = "N/A";
       } else if (record.checkinTime && record.checkoutTime) {
         // Tính thời gian làm việc nếu có cả checkin và checkout
         const durationMinutes = (record.checkoutTime - record.checkinTime) / (1000 * 60);
         const hours = Math.floor(durationMinutes / 60);
         const minutes = Math.floor(durationMinutes % 60);
         record.workingTime = `${hours}h ${minutes}m`;
+      } else {
+        record.workingTime = "N/A";
       }
     });
 
+    // Chuyển đổi từ object sang array và sắp xếp theo thời gian
     const result = Object.values(checksByPerson).sort(
-      (a, b) => a.checkinTime - b.checkinTime
+      (a, b) => {
+        const timeA = a.checkinTime ? parseInt(a.checkinTime, 10) : 0;
+        const timeB = b.checkinTime ? parseInt(b.checkinTime, 10) : 0;
+        return timeA - timeB;
+      }
     );
 
+    console.log(`Kết quả cuối cùng: ${result.length} bản ghi đã được xử lý.`);
     return result;
   } catch (error) {
     console.error("Lỗi khi xử lý dữ liệu:", error);
@@ -139,6 +164,8 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
   const toDate = new Date(parseInt(dateTo, 10));
   const diffInHours = (toDate - fromDate) / (1000 * 60 * 60);
   
+  console.log(`Đã nhận yêu cầu truy vấn từ ${fromDate.toLocaleString()} đến ${toDate.toLocaleString()} (${diffInHours.toFixed(1)} giờ)`);
+  
   // Giới hạn thời gian mỗi lần truy vấn API
   const MAX_HOURS = 24;
   const MAX_PAGES = 20; // Tăng giới hạn số trang để lấy đầy đủ dữ liệu hơn
@@ -191,6 +218,9 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
     let hasMorePages = true;
     let encounteredTimeout = false;
     
+    // Thiết lập số lần thử lại cố định cho mỗi trang
+    const PAGE_RETRIES = 2;
+    
     for (let index = 1; index <= MAX_PAGES && hasMorePages; index++) {
       const apiUrl = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
       const requestData = {
@@ -203,74 +233,81 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
         page: index,
       };
 
-      try {
-        console.log(`Đang gọi HANET API cho placeID=${placeId}, khoảng ${new Date(parseInt(startTime)).toISOString()} - ${new Date(parseInt(endTime)).toISOString()}, trang ${index}/${MAX_PAGES}...`);
-        
-        // Sử dụng hàm thử lại
-        const response = await fetchWithRetry(apiUrl, requestData);
-        
-        if (response.data && typeof response.data.returnCode !== "undefined") {
-          if (response.data.returnCode === 1 || response.data.returnCode === 0) {
-            if (Array.isArray(response.data.data)) {
-              const pageData = response.data.data;
-              
-              if (pageData.length === 0) {
-                console.log(`Không còn dữ liệu ở trang ${index}, dừng truy vấn.`);
+      // Thực hiện với cơ chế thử lại
+      let pageSuccess = false;
+      let pageData = [];
+      
+      for (let attempt = 0; attempt <= PAGE_RETRIES && !pageSuccess; attempt++) {
+        try {
+          if (attempt > 0) {
+            console.log(`Đang thử lại lần ${attempt} cho trang ${index}...`);
+            await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+          }
+          
+          console.log(`Đang gọi HANET API cho placeID=${placeId}, khoảng ${new Date(parseInt(startTime)).toLocaleString()} - ${new Date(parseInt(endTime)).toLocaleString()}, trang ${index}/${MAX_PAGES}...`);
+          
+          // Sử dụng hàm thử lại
+          const response = await fetchWithRetry(apiUrl, requestData);
+          
+          if (response.data && typeof response.data.returnCode !== "undefined") {
+            if (response.data.returnCode === 1 || response.data.returnCode === 0) {
+              if (Array.isArray(response.data.data)) {
+                pageData = response.data.data;
+                pageSuccess = true;
+                
+                if (pageData.length === 0) {
+                  console.log(`Không còn dữ liệu ở trang ${index}, dừng truy vấn.`);
+                  hasMorePages = false;
+                  break;
+                }
+                
+                // Nếu số bản ghi nhận được nhỏ hơn kích thước trang, có thể đã hết dữ liệu
+                if (pageData.length < 500) {
+                  hasMorePages = false;
+                  console.log(`Đã nhận ${pageData.length} bản ghi < 500, có thể đã hết dữ liệu.`);
+                }
+              } else {
+                console.warn(`Dữ liệu trả về không phải mảng hoặc không có.`);
                 hasMorePages = false;
-                break;
-              }
-              
-              // Lọc bỏ các bản ghi không hợp lệ (không có personID hoặc checkinTime)
-              const validRecords = pageData.filter(record => record.personID && record.checkinTime);
-              
-              segmentData = [...segmentData, ...validRecords];
-              totalRecords += validRecords.length;
-              
-              console.log(
-                `Đã nhận ${validRecords.length} bản ghi hợp lệ từ trang ${index}, tổng cộng: ${totalRecords}`
-              );
-              
-              // Nếu số bản ghi nhận được nhỏ hơn kích thước trang, có thể đã hết dữ liệu
-              if (pageData.length < 500) {
-                hasMorePages = false;
-                console.log(`Đã nhận ${pageData.length} bản ghi < 500, có thể đã hết dữ liệu.`);
               }
             } else {
-              console.warn(`Dữ liệu trả về không phải mảng hoặc không có.`);
-              hasMorePages = false;
+              console.error(
+                `Lỗi logic từ HANET: Mã lỗi ${response.data.returnCode}, Thông điệp: ${response.data.returnMessage || "N/A"}`
+              );
+              // Vẫn tiếp tục với các trang tiếp theo nếu có lỗi lần này
             }
           } else {
-            console.error(
-              `Lỗi logic từ HANET: Mã lỗi ${response.data.returnCode}, Thông điệp: ${response.data.returnMessage || "N/A"}`
-            );
-            // Vẫn tiếp tục với các trang tiếp theo nếu có lỗi lần này
+            console.error(`Response không hợp lệ từ HANET:`, response.data);
           }
-        } else {
-          console.error(`Response không hợp lệ từ HANET:`, response.data);
-        }
-      } catch (error) {
-        console.error(`Không thể lấy dữ liệu cho trang ${index}:`, error.message);
-        
-        // Xử lý lỗi timeout riêng biệt
-        if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
-          console.warn(`Lỗi timeout cho trang ${index}, có thể dữ liệu quá lớn hoặc server đang bận.`);
-          encounteredTimeout = true;
+        } catch (error) {
+          console.error(`Không thể lấy dữ liệu cho trang ${index} (lần thử ${attempt + 1}):`, error.message);
           
-          // Nếu đã lấy được một số dữ liệu, có thể dừng truy vấn ở đây để trả về những gì đã có
-          if (totalRecords > 0) {
-            console.log(`Đã lấy được ${totalRecords} bản ghi, dừng truy vấn do timeout.`);
-            hasMorePages = false;
-            break;
-          } else if (index === 1) {
-            // Nếu timeout ở trang đầu tiên và chưa lấy được dữ liệu, 
-            // có thể khoảng thời gian quá lớn - thử chia nhỏ
-            console.log(`Timeout ở trang đầu tiên, thử chia nhỏ khoảng thời gian để xử lý...`);
-            hasMorePages = false;
-            break;
+          // Xử lý lỗi timeout riêng biệt
+          if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
+            console.warn(`Lỗi timeout cho trang ${index}, có thể dữ liệu quá lớn hoặc server đang bận.`);
+            encounteredTimeout = true;
+            
+            // Nếu đã là lần thử cuối cùng và gặp timeout ở trang đầu tiên mà chưa có dữ liệu
+            // chúng ta sẽ thử chia nhỏ khoảng thời gian
+            if (attempt === PAGE_RETRIES && index === 1 && totalRecords === 0) {
+              console.log(`Timeout ở trang đầu tiên sau ${PAGE_RETRIES + 1} lần thử, sẽ thử chia nhỏ khoảng thời gian.`);
+              break;
+            }
           }
         }
+      }
+      
+      // Nếu lấy được dữ liệu trang thành công, thêm vào kết quả
+      if (pageSuccess && pageData.length > 0) {
+        // Thêm vào dữ liệu đã lấy được
+        segmentData = [...segmentData, ...pageData];
+        totalRecords += pageData.length;
         
-        // Vẫn tiếp tục với các trang tiếp theo nếu có lỗi lần này
+        console.log(`Đã nhận ${pageData.length} bản ghi từ trang ${index}, tổng cộng: ${totalRecords}`);
+      } else if (!pageSuccess && index === 1 && encounteredTimeout) {
+        // Nếu không thành công với trang đầu tiên và gặp timeout, dừng lại để chia nhỏ thời gian
+        hasMorePages = false;
+        break;
       }
     }
     
@@ -295,73 +332,76 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
       return [...firstHalfData, ...secondHalfData];
     }
     
-    // Sắp xếp dữ liệu theo thời gian trước khi trả về
-    segmentData.sort((a, b) => a.checkinTime - b.checkinTime);
     console.log(`Tổng cộng đã lấy được ${segmentData.length} bản ghi cho khoảng thời gian.`);
     
     return segmentData;
   };
   
+  let allData = [];
+  
   // Nếu khoảng thời gian nhỏ hơn hoặc bằng 24 giờ, thực hiện bình thường
   if (diffInHours <= MAX_HOURS) {
     console.log(`Khoảng thời gian nhỏ hơn ${MAX_HOURS} giờ, thực hiện truy vấn trực tiếp.`);
-    const rawCheckinData = await fetchSegment(dateFrom, dateTo);
-    console.log(`Gọi filterCheckinsByDay với ${rawCheckinData.length} bản ghi trực tiếp.`);
-    return filterCheckinsByDay(rawCheckinData);
-  }
-  
-  // Nếu khoảng thời gian lớn hơn 24 giờ, chia nhỏ thành nhiều lần truy vấn
-  console.log(`Khoảng thời gian lớn (${diffInHours.toFixed(1)} giờ), chia nhỏ thành nhiều lần truy vấn.`);
-  
-  // Chia khoảng thời gian lớn hơn thành các đoạn nhỏ hơn
-  // Chia nhỏ hơn với các phần chồng lấn để đảm bảo không bỏ sót dữ liệu
-  const segmentCount = Math.ceil(diffInHours / (MAX_HOURS * 0.95)); // Giảm kích thước mỗi đoạn xuống 95% để có chồng lấp
-  const segmentMs = Math.floor((toDate - fromDate) / segmentCount);
-  const overlap = Math.floor(segmentMs * 0.05); // Chồng lấp 5% giữa các đoạn
-  
-  console.log(`Sẽ thực hiện ${segmentCount} lần truy vấn với chồng lấp để đảm bảo độ phủ.`);
-  
-  // Truy vấn từng đoạn và kết hợp kết quả
-  let rawCheckinData = [];
-  
-  for (let i = 0; i < segmentCount; i++) {
-    // Tính toán điểm bắt đầu và kết thúc của mỗi đoạn
-    let segmentStart = fromDate.getTime() + (i * segmentMs);
-    if (i > 0) {
-      segmentStart -= overlap; // Trừ đi phần chồng lấp cho các đoạn sau đoạn đầu tiên
-    }
+    allData = await fetchSegment(dateFrom, dateTo);
+  } else {
+    // Nếu khoảng thời gian lớn hơn 24 giờ, chia nhỏ thành nhiều lần truy vấn
+    console.log(`Khoảng thời gian lớn (${diffInHours.toFixed(1)} giờ), chia nhỏ thành nhiều lần truy vấn.`);
     
-    let segmentEnd;
-    if (i === segmentCount - 1) {
-      segmentEnd = toDate.getTime(); // Đảm bảo đoạn cuối cùng bao gồm toàn bộ thời gian còn lại
-    } else {
-      segmentEnd = fromDate.getTime() + ((i + 1) * segmentMs);
-    }
+    // Chia khoảng thời gian lớn hơn thành các đoạn nhỏ hơn
+    // Chia nhỏ hơn với các phần chồng lấn để đảm bảo không bỏ sót dữ liệu
+    const segmentCount = Math.ceil(diffInHours / (MAX_HOURS * 0.95)); // Giảm kích thước mỗi đoạn xuống 95% để có chồng lấp
+    const segmentMs = Math.floor((toDate - fromDate) / segmentCount);
+    const overlap = Math.floor(segmentMs * 0.05); // Chồng lấp 5% giữa các đoạn
     
-    console.log(`Đang xử lý phần ${i+1}/${segmentCount}: ${new Date(segmentStart).toLocaleString()} - ${new Date(segmentEnd).toLocaleString()}`);
+    console.log(`Sẽ thực hiện ${segmentCount} lần truy vấn với chồng lấp để đảm bảo độ phủ.`);
     
-    try {
-      // Truy vấn dữ liệu cho đoạn này
-      const segmentData = await fetchSegment(segmentStart.toString(), segmentEnd.toString());
-      console.log(`Đã nhận ${segmentData.length} bản ghi từ phần ${i+1}/${segmentCount}`);
+    // Truy vấn từng đoạn và kết hợp kết quả
+    let rawCheckinData = [];
+    
+    for (let i = 0; i < segmentCount; i++) {
+      // Tính toán điểm bắt đầu và kết thúc của mỗi đoạn
+      let segmentStart = fromDate.getTime() + (i * segmentMs);
+      if (i > 0) {
+        segmentStart -= overlap; // Trừ đi phần chồng lấp cho các đoạn sau đoạn đầu tiên
+      }
       
-      // Thêm vào dữ liệu tổng hợp
-      rawCheckinData = [...rawCheckinData, ...segmentData];
-    } catch (error) {
-      console.error(`Lỗi khi xử lý phần ${i+1}/${segmentCount}:`, error.message);
+      let segmentEnd;
+      if (i === segmentCount - 1) {
+        segmentEnd = toDate.getTime(); // Đảm bảo đoạn cuối cùng bao gồm toàn bộ thời gian còn lại
+      } else {
+        segmentEnd = fromDate.getTime() + ((i + 1) * segmentMs);
+      }
+      
+      console.log(`Đang xử lý phần ${i+1}/${segmentCount}: ${new Date(segmentStart).toLocaleString()} - ${new Date(segmentEnd).toLocaleString()}`);
+      
+      try {
+        // Truy vấn dữ liệu cho đoạn này
+        const segmentData = await fetchSegment(segmentStart.toString(), segmentEnd.toString());
+        console.log(`Đã nhận ${segmentData.length} bản ghi từ phần ${i+1}/${segmentCount}`);
+        
+        // Thêm vào dữ liệu tổng hợp
+        rawCheckinData = [...rawCheckinData, ...segmentData];
+      } catch (error) {
+        console.error(`Lỗi khi xử lý phần ${i+1}/${segmentCount}:`, error.message);
+      }
     }
+    
+    allData = rawCheckinData;
   }
   
-  console.log(`Đã nhận tổng cộng ${rawCheckinData.length} bản ghi chưa xử lý.`);
+  console.log(`Đã nhận tổng cộng ${allData.length} bản ghi chưa xử lý.`);
   
   // Lọc bỏ các bản ghi trùng lặp
   // Phương pháp lọc dựa trên tổ hợp personID và checkinTime
   const uniqueMap = {};
   const uniqueRecords = [];
   
-  for (const record of rawCheckinData) {
-    if (record.personID && record.checkinTime) {
-      const key = `${record.personID}_${record.checkinTime}`;
+  for (const record of allData) {
+    if (record && record.personID) {
+      const key = record.checkinTime ? 
+        `${record.personID}_${record.checkinTime}` : 
+        `${record.personID}_notime_${Date.now()}`;
+        
       if (!uniqueMap[key]) {
         uniqueMap[key] = true;
         uniqueRecords.push(record);
@@ -370,9 +410,13 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
   }
   
   // Sắp xếp các bản ghi theo thời gian
-  uniqueRecords.sort((a, b) => a.checkinTime - b.checkinTime);
+  uniqueRecords.sort((a, b) => {
+    const timeA = a.checkinTime ? parseInt(a.checkinTime, 10) : 0;
+    const timeB = b.checkinTime ? parseInt(b.checkinTime, 10) : 0;
+    return timeA - timeB;
+  });
   
-  console.log(`Hoàn tất! Sau khi lọc trùng còn ${uniqueRecords.length} bản ghi duy nhất.`);
+  console.log(`Sau khi lọc trùng còn ${uniqueRecords.length} bản ghi duy nhất.`);
   
   // Sử dụng hàm filterCheckinsByDay để xử lý dữ liệu
   console.log(`Gọi filterCheckinsByDay với ${uniqueRecords.length} bản ghi.`);
