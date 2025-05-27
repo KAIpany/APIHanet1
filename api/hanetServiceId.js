@@ -144,20 +144,22 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
   const MAX_PAGES = 20; // Tăng giới hạn số trang để lấy đầy đủ dữ liệu hơn
   
   // Hàm thử lại truy vấn khi gặp lỗi
-  const fetchWithRetry = async (url, data, maxRetries = 2) => {
+  const fetchWithRetry = async (url, data, maxRetries = 3) => {
     let lastError;
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0) {
           console.log(`Thử lại lần ${attempt} cho truy vấn API...`);
-          // Chờ 1 giây trước khi thử lại
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // Chờ thêm thời gian giữa các lần thử lại, tăng dần theo số lần thử
+          const delayMs = 2000 * (attempt + 1);
+          console.log(`Chờ ${delayMs}ms trước khi thử lại...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
         }
         
         const config = {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          timeout: 9000, // Tăng timeout cho phép trả về nhiều dữ liệu hơn
+          timeout: 30000, // Tăng timeout lên 30 giây
         };
         
         const response = await axios.post(url, qs.stringify(data), config);
@@ -165,17 +167,29 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
       } catch (error) {
         lastError = error;
         console.warn(`Lỗi lần thử ${attempt + 1}/${maxRetries}:`, error.message);
+        
+        if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
+          console.log(`Gặp lỗi timeout, sẽ thử lại với thời gian chờ dài hơn...`);
+        }
       }
     }
     
     throw lastError;
   };
 
-  // Hàm thực hiện một lần truy vấn API trong khoảng thời gian nhỏ
-  const fetchSegment = async (startTime, endTime) => {
+  // Hàm thực hiện một lần truy vấn API trong khoảng thời gian nhỏ với khả năng chia nhỏ thời gian khi timeout
+  const fetchSegment = async (startTime, endTime, recursionDepth = 0) => {
+    // Giới hạn độ sâu đệ quy để tránh vấn đề
+    const MAX_RECURSION = 3;
+    if (recursionDepth > MAX_RECURSION) {
+      console.warn(`Đã đạt giới hạn đệ quy (${MAX_RECURSION}), dừng phân chia.`);
+      return [];
+    }
+    
     let segmentData = [];
     let totalRecords = 0;
     let hasMorePages = true;
+    let encounteredTimeout = false;
     
     for (let index = 1; index <= MAX_PAGES && hasMorePages; index++) {
       const apiUrl = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
@@ -236,8 +250,49 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
         }
       } catch (error) {
         console.error(`Không thể lấy dữ liệu cho trang ${index}:`, error.message);
+        
+        // Xử lý lỗi timeout riêng biệt
+        if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
+          console.warn(`Lỗi timeout cho trang ${index}, có thể dữ liệu quá lớn hoặc server đang bận.`);
+          encounteredTimeout = true;
+          
+          // Nếu đã lấy được một số dữ liệu, có thể dừng truy vấn ở đây để trả về những gì đã có
+          if (totalRecords > 0) {
+            console.log(`Đã lấy được ${totalRecords} bản ghi, dừng truy vấn do timeout.`);
+            hasMorePages = false;
+            break;
+          } else if (index === 1) {
+            // Nếu timeout ở trang đầu tiên và chưa lấy được dữ liệu, 
+            // có thể khoảng thời gian quá lớn - thử chia nhỏ
+            console.log(`Timeout ở trang đầu tiên, thử chia nhỏ khoảng thời gian để xử lý...`);
+            hasMorePages = false;
+            break;
+          }
+        }
+        
         // Vẫn tiếp tục với các trang tiếp theo nếu có lỗi lần này
       }
+    }
+    
+    // Nếu gặp timeout ở trang đầu tiên và chưa lấy được dữ liệu, thử chia nhỏ khoảng thời gian
+    if (encounteredTimeout && totalRecords === 0 && recursionDepth < MAX_RECURSION) {
+      console.log(`Chia nhỏ khoảng thời gian do timeout (độ sâu đệ quy: ${recursionDepth})`);
+      
+      // Chia đôi khoảng thời gian
+      const startTs = parseInt(startTime, 10);
+      const endTs = parseInt(endTime, 10);
+      const midTs = Math.floor((startTs + endTs) / 2);
+      
+      console.log(`Chia khoảng thời gian ${new Date(startTs).toLocaleString()} - ${new Date(endTs).toLocaleString()} thành 2 phần:`);
+      console.log(`1. ${new Date(startTs).toLocaleString()} - ${new Date(midTs).toLocaleString()}`);
+      console.log(`2. ${new Date(midTs).toLocaleString()} - ${new Date(endTs).toLocaleString()}`);
+      
+      // Truy vấn đệ quy cho mỗi nửa
+      const firstHalfData = await fetchSegment(startTs.toString(), midTs.toString(), recursionDepth + 1);
+      const secondHalfData = await fetchSegment(midTs.toString(), endTs.toString(), recursionDepth + 1);
+      
+      // Kết hợp kết quả
+      return [...firstHalfData, ...secondHalfData];
     }
     
     // Sắp xếp dữ liệu theo thời gian trước khi trả về

@@ -155,21 +155,44 @@ app.get("/api/checkins", validateCheckinParams, async (req, res, next) => {
       }`
     );
 
-    const filteredCheckins = await hanetServiceId.getPeopleListByMethod(
-      placeId,
-      fromTimestamp,
-      toTimestamp,
-      devices
-    );
+    // Tính thời gian thực hiện
+    const startTime = process.hrtime();
+    
+    try {
+      const filteredCheckins = await hanetServiceId.getPeopleListByMethod(
+        placeId,
+        fromTimestamp,
+        toTimestamp,
+        devices
+      );
+      
+      // Tính thời gian đã thực hiện
+      const endTime = process.hrtime(startTime);
+      const timeInSeconds = endTime[0] + endTime[1] / 1e9;
+      
+      console.log(
+        `[${new Date().toISOString()}] Trả về ${
+          Array.isArray(filteredCheckins) ? filteredCheckins.length : "kết quả"
+        } checkin, thực hiện trong ${timeInSeconds.toFixed(2)}s.`
+      );
 
-    console.log(
-      `[${new Date().toISOString()}] Trả về ${
-        Array.isArray(filteredCheckins) ? filteredCheckins.length : "kết quả"
-      } checkin.`
-    );
-
-    res.status(200).json(filteredCheckins);
+      res.status(200).json(filteredCheckins);
+    } catch (error) {
+      // Kiểm tra lỗi timeout
+      if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
+        console.error(`[${new Date().toISOString()}] Lỗi timeout khi truy vấn dữ liệu:`, error.message);
+        return res.status(504).json({
+          success: false,
+          message: "Yêu cầu mất quá nhiều thời gian để xử lý. Vui lòng thử với khoảng thời gian nhỏ hơn hoặc thử lại sau.",
+          error: "TIMEOUT_ERROR",
+          details: error.message
+        });
+      }
+      
+      throw error;
+    }
   } catch (err) {
+    console.error(`[${new Date().toISOString()}] Lỗi khi xử lý yêu cầu checkins:`, err.message);
     next(err);
   }
 });
