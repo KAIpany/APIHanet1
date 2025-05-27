@@ -22,16 +22,7 @@ function filterCheckinsByDay(data) {
     // Sao chép dữ liệu để tránh thay đổi dữ liệu gốc
     validData = JSON.parse(JSON.stringify(validData));
     
-    // Bổ sung trường date nếu chưa có
-    validData.forEach(item => {
-      if (!item.date && item.checkinTime) {
-        // Sử dụng múi giờ UTC+7 (Việt Nam)
-        const checkinDate = new Date(parseInt(item.checkinTime));
-        const vietnamDate = convertToVietnamTime(checkinDate);
-        item.date = `${vietnamDate.getFullYear()}-${String(vietnamDate.getMonth() + 1).padStart(2, '0')}-${String(vietnamDate.getDate()).padStart(2, '0')}`;
-      }
-    });
-    
+    // Xử lý lọc và nhóm dữ liệu - tương tự cách frontend xử lý
     console.log(`Xử lý ${validData.length} bản ghi thô...`);
     
     // Lọc bỏ các bản ghi không hợp lệ
@@ -45,86 +36,98 @@ function filterCheckinsByDay(data) {
     
     console.log(`Sau khi lọc, còn lại ${validCheckins.length} bản ghi hợp lệ.`);
 
-    // In thông tin debug để kiểm tra
-    console.log(`Danh sách bản ghi hợp lệ: ${validCheckins.length} bản ghi.`);
-    
-    // Tạo một đối tượng tạm để theo dõi check-in và check-out của mỗi người theo ngày
-    const checksByPerson = {};
-
     // Đảm bảo các bản ghi được sắp xếp theo thời gian
     validCheckins.sort((a, b) => {
-      // Chuyển đổi sang số để đảm bảo so sánh chính xác
       const timeA = typeof a.checkinTime === 'string' ? parseInt(a.checkinTime) : a.checkinTime;
       const timeB = typeof b.checkinTime === 'string' ? parseInt(b.checkinTime) : b.checkinTime;
       return timeA - timeB;
     });
 
-    // Lưu danh sách personKey đã xử lý để đảm bảo không trùng lặp
-    const processedKeys = new Set();
-    
-    // Xử lý từng bản ghi check-in
-    validCheckins.forEach((check) => {
-      if (!check.date) {
-        const checkinDate = new Date(parseInt(check.checkinTime));
-        const vietnamDate = convertToVietnamTime(checkinDate);
-        check.date = `${vietnamDate.getFullYear()}-${String(vietnamDate.getMonth() + 1).padStart(2, '0')}-${String(vietnamDate.getDate()).padStart(2, '0')}`;
-      }
-      
-      const date = check.date;
-      const personKey = `${date}_${check.personID}`;
-      
-      // Format thông tin người check
-      const personInfo = {
-        personName: check.personName !== undefined ? check.personName : "",
-        personID: check.personID,
-        aliasID: check.aliasID !== undefined ? check.aliasID : "",
-        placeID: check.placeID !== undefined ? check.placeID : null,
-        title: check.title
-          ? typeof check.title === "string"
-            ? check.title.trim()
-            : "N/A"
-          : "Khách hàng",
-        type: check.type !== undefined ? check.type : null,
-        deviceID: check.deviceID !== undefined ? check.deviceID : "",
-        deviceName: check.deviceName !== undefined ? check.deviceName : "",
-        date: check.date,
-      };
+    // Nhóm bản ghi theo person_date dựa trên ngày Việt Nam (UTC+7)
+    const checksByPersonDate = {};
+    const dailyFirstLastChecks = {};
 
-      if (!checksByPerson[personKey]) {
-        // Nếu chưa có thông tin cho người này trong ngày này
-        checksByPerson[personKey] = {
-          ...personInfo,
-          checkinTime: check.checkinTime, // Lần check đầu tiên là check-in
-          checkoutTime: null, // Ban đầu không có checkout
-          formattedCheckinTime: formatTimestampWithVietnamTime(check.checkinTime),
-          formattedCheckoutTime: null
-        };
-      } else {
-        // Nếu đã có thông tin, cập nhật checkout time là lần check cuối cùng
-        checksByPerson[personKey].checkoutTime = check.checkinTime;
-        checksByPerson[personKey].formattedCheckoutTime = formatTimestampWithVietnamTime(check.checkinTime);
+    // Bước 1: Nhóm tất cả bản ghi theo personID và ngày (Vietnam time)
+    validCheckins.forEach(check => {
+      // Đảm bảo timestamp là số
+      const checkinMs = typeof check.checkinTime === 'string' ? parseInt(check.checkinTime) : check.checkinTime;
+      
+      // Chuyển đổi sang múi giờ Việt Nam
+      const checkinDate = new Date(checkinMs);
+      const vietnamDate = convertToVietnamTime(checkinDate);
+      
+      // Tạo khóa ngày theo định dạng yyyy-mm-dd
+      const dateStr = `${vietnamDate.getFullYear()}-${String(vietnamDate.getMonth() + 1).padStart(2, '0')}-${String(vietnamDate.getDate()).padStart(2, '0')}`;
+      const personDateKey = `${dateStr}_${check.personID}`;
+      
+      // Lưu trữ ngày vào bản ghi
+      check.date = dateStr;
+      
+      // Kiểm tra xem đã có bản ghi cho person+date này chưa
+      if (!checksByPersonDate[personDateKey]) {
+        checksByPersonDate[personDateKey] = [];
       }
+      
+      // Thêm bản ghi vào nhóm
+      checksByPersonDate[personDateKey].push(check);
     });
 
-    // Xử lý tính toán thời gian làm việc và định dạng thời gian
-    Object.values(checksByPerson).forEach(record => {
-      // Thêm tính toán thời gian làm việc
+    // Bước 2: Tìm check-in đầu tiên và check-out cuối cùng trong mỗi ngày
+    for (const [personDateKey, checks] of Object.entries(checksByPersonDate)) {
+      // Sắp xếp theo thời gian
+      checks.sort((a, b) => {
+        const timeA = typeof a.checkinTime === 'string' ? parseInt(a.checkinTime) : a.checkinTime;
+        const timeB = typeof b.checkinTime === 'string' ? parseInt(b.checkinTime) : b.checkinTime;
+        return timeA - timeB;
+      });
+      
+      // Lấy bản ghi đầu tiên và cuối cùng
+      const firstCheck = checks[0];
+      const lastCheck = checks[checks.length - 1];
+      
+      // Tạo bản ghi mới cho ngày này
+      dailyFirstLastChecks[personDateKey] = {
+        personName: firstCheck.personName,
+        personID: firstCheck.personID,
+        aliasID: firstCheck.aliasID || "",
+        placeID: firstCheck.placeID || "",
+        title: firstCheck.title ? (typeof firstCheck.title === "string" ? firstCheck.title.trim() : "N/A") : "Khách hàng",
+        type: firstCheck.type !== undefined ? firstCheck.type : null,
+        deviceID: firstCheck.deviceID || "",
+        deviceName: firstCheck.deviceName || "",
+        date: firstCheck.date,
+        checkinTime: firstCheck.checkinTime,
+        formattedCheckinTime: formatTimestampWithVietnamTime(firstCheck.checkinTime)
+      };
+      
+      // Nếu có nhiều hơn 1 bản ghi trong ngày, thì bản ghi cuối cùng là check-out
+      if (checks.length > 1 && firstCheck.checkinTime !== lastCheck.checkinTime) {
+        dailyFirstLastChecks[personDateKey].checkoutTime = lastCheck.checkinTime;
+        dailyFirstLastChecks[personDateKey].formattedCheckoutTime = formatTimestampWithVietnamTime(lastCheck.checkinTime);
+      } else {
+        // Nếu chỉ có 1 bản ghi hoặc tất cả bản ghi có cùng thời gian, thì không có check-out
+        dailyFirstLastChecks[personDateKey].checkoutTime = null;
+        dailyFirstLastChecks[personDateKey].formattedCheckoutTime = null;
+      }
+    }
+
+    // Bước 3: Tính toán thời gian làm việc và định dạng hiển thị
+    Object.values(dailyFirstLastChecks).forEach(record => {
+      // Tính thời gian làm việc nếu có cả check-in và check-out
       if (record.checkinTime && record.checkoutTime) {
         const checkinMs = typeof record.checkinTime === 'string' ? parseInt(record.checkinTime) : record.checkinTime;
         const checkoutMs = typeof record.checkoutTime === 'string' ? parseInt(record.checkoutTime) : record.checkoutTime;
         
-        // Nếu thời gian checkout <= checkin thì đặt checkout = null
-        if (checkoutMs <= checkinMs) {
-          record.checkoutTime = null;
-          record.formattedCheckoutTime = null;
-          record.workingTime = null;
-        } else {
-          const workingTimeMs = checkoutMs - checkinMs;
-          
+        const workingTimeMs = checkoutMs - checkinMs;
+        
+        if (workingTimeMs > 0) {
           // Tính thời gian làm việc theo giờ và phút
           const workingHours = Math.floor(workingTimeMs / (1000 * 60 * 60));
           const workingMinutes = Math.floor((workingTimeMs % (1000 * 60 * 60)) / (1000 * 60));
           record.workingTime = `${workingHours}h ${workingMinutes}m`;
+        } else {
+          // Nếu thời gian làm việc quá ngắn (dưới 1 phút)
+          record.workingTime = "0h 0m";
         }
       } else {
         record.workingTime = null;
@@ -150,14 +153,12 @@ function filterCheckinsByDay(data) {
       }
     });
     
-    // Đảm bảo sắp xếp theo thời gian check-in
-    const result = Object.values(checksByPerson).sort(
-      (a, b) => {
-        const timeA = typeof a.checkinTime === 'string' ? parseInt(a.checkinTime) : a.checkinTime;
-        const timeB = typeof b.checkinTime === 'string' ? parseInt(b.checkinTime) : b.checkinTime;
-        return timeA - timeB;
-      }
-    );
+    // Chuyển kết quả thành mảng và sắp xếp theo thời gian check-in
+    const result = Object.values(dailyFirstLastChecks).sort((a, b) => {
+      const timeA = typeof a.checkinTime === 'string' ? parseInt(a.checkinTime) : a.checkinTime;
+      const timeB = typeof b.checkinTime === 'string' ? parseInt(b.checkinTime) : b.checkinTime;
+      return timeA - timeB;
+    });
     
     console.log(`Kết quả cuối cùng: ${result.length} bản ghi.`);
     return result;
