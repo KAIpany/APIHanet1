@@ -194,6 +194,36 @@ const apiService = {
     const diffInHours = (toTimestamp - fromTimestamp) / (1000 * 60 * 60);
     const MAX_HOURS = 24; // Giới hạn mỗi lần truy vấn
     
+    // Hàm thử lại truy vấn khi gặp lỗi
+    const fetchWithRetry = async (url, maxRetries = 2) => {
+      let lastError;
+      
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          if (attempt > 0) {
+            console.log(`Thử lại lần ${attempt} cho URL: ${url}`);
+            // Chờ 1 giây trước khi thử lại
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          
+          const result = await fetchWithAuth(url);
+          return result;
+        } catch (error) {
+          lastError = error;
+          console.warn(`Lỗi lần thử ${attempt + 1}/${maxRetries}:`, error.message);
+          
+          // Nếu lỗi timeout, không cần thử lại nữa
+          if (error.message && (error.message.includes('timeout') || 
+              error.message.includes('FUNCTION_INVOCATION_TIMEOUT') ||
+              error.message.includes('Gateway Timeout'))) {
+            break;
+          }
+        }
+      }
+      
+      throw lastError;
+    };
+    
     // Nếu khoảng thời gian nhỏ hơn 24 giờ, thực hiện truy vấn bình thường
     if (diffInHours <= MAX_HOURS) {
       let url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${fromTimestamp}&dateTo=${toTimestamp}`;
@@ -202,7 +232,7 @@ const apiService = {
       }
       
       try {
-        return await fetchWithAuth(url);
+        return await fetchWithRetry(url);
       } catch (error) {
         if (error.message && (error.message.includes('timeout') || 
             error.message.includes('FUNCTION_INVOCATION_TIMEOUT') ||
@@ -218,7 +248,16 @@ const apiService = {
     
     // Tính số lần cần chia
     const segmentCount = Math.ceil(diffInHours / MAX_HOURS);
+    // Chia khoảng thời gian thành các đoạn bằng nhau
     const segmentMs = Math.floor((toTimestamp - fromTimestamp) / segmentCount);
+    
+    // Lưu trữ các đoạn thời gian cần truy vấn
+    const segments = [];
+    for (let i = 0; i < segmentCount; i++) {
+      const start = fromTimestamp + (i * segmentMs);
+      const end = (i === segmentCount - 1) ? toTimestamp : fromTimestamp + ((i + 1) * segmentMs) - 1;
+      segments.push({ start, end, index: i + 1 });
+    }
     
     // Hiển thị thông báo cho người dùng
     console.log(`Đang thực hiện ${segmentCount} lần truy vấn để lấy dữ liệu từ ${new Date(fromTimestamp).toLocaleString()} đến ${new Date(toTimestamp).toLocaleString()}`);
@@ -226,35 +265,58 @@ const apiService = {
     // Thực hiện nhiều lần truy vấn và kết hợp kết quả
     let allResults = [];
     let errors = [];
+    let processedCount = 0;
     
-    for (let i = 0; i < segmentCount; i++) {
-      const start = fromTimestamp + (i * segmentMs);
-      const end = (i === segmentCount - 1) ? toTimestamp : fromTimestamp + ((i + 1) * segmentMs) - 1;
+    // Khử dụng cho trường hợp trùng dữ liệu
+    const uniqueRecords = new Map();
+    
+    // Xử lý từng đoạn thời gian
+    for (const segment of segments) {
+      console.log(`Đang lấy dữ liệu phần ${segment.index}/${segmentCount}: ${new Date(segment.start).toLocaleString()} - ${new Date(segment.end).toLocaleString()}`);
       
-      console.log(`Đang lấy dữ liệu phần ${i+1}/${segmentCount}: ${new Date(start).toLocaleString()} - ${new Date(end).toLocaleString()}`);
-      
-      let url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${start}&dateTo=${end}`;
+      let url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${segment.start}&dateTo=${segment.end}`;
       if (deviceId) {
         url += `&devices=${deviceId}`;
       }
       
       try {
-        const segmentResult = await fetchWithAuth(url);
+        // Sử dụng hàm thử lại
+        const segmentResult = await fetchWithRetry(url);
+        processedCount++;
+        
         if (Array.isArray(segmentResult)) {
-          console.log(`Đã nhận ${segmentResult.length} bản ghi từ phần ${i+1}/${segmentCount}`);
-          allResults = [...allResults, ...segmentResult];
+          console.log(`Đã nhận ${segmentResult.length} bản ghi từ phần ${segment.index}/${segmentCount}`);
+          
+          // Thêm các bản ghi duy nhất (lọc trùng bằng ID hoặc thời gian check-in)
+          for (const record of segmentResult) {
+            // Tạo khóa duy nhất cho mỗi bản ghi
+            const recordKey = `${record.personID}_${record.checkinTime}`;
+            if (!uniqueRecords.has(recordKey)) {
+              uniqueRecords.set(recordKey, record);
+            }
+          }
         }
       } catch (error) {
-        console.error(`Lỗi khi lấy dữ liệu phần ${i+1}/${segmentCount}:`, error.message);
-        errors.push(`Phần ${i+1}: ${error.message}`);
+        console.error(`Lỗi khi lấy dữ liệu phần ${segment.index}/${segmentCount}:`, error.message);
+        errors.push(`Phần ${segment.index}: ${error.message}`);
       }
+      
+      // Cập nhật tiến trình
+      console.log(`Tiến trình: ${processedCount}/${segmentCount} phần (${Math.round(processedCount/segmentCount*100)}%)`);
     }
     
+    // Chuyển Map thành mảng kết quả
+    allResults = Array.from(uniqueRecords.values());
+    
+    // Kiểm tra nếu không có kết quả nào và có lỗi
     if (allResults.length === 0 && errors.length > 0) {
       throw new Error(`Không thể lấy dữ liệu. Lỗi: ${errors.join(', ')}`);
     }
     
-    console.log(`Hoàn tất! Đã lấy tổng cộng ${allResults.length} bản ghi.`);
+    // Sắp xếp kết quả theo thời gian check-in
+    allResults.sort((a, b) => a.checkinTime - b.checkinTime);
+    
+    console.log(`Hoàn tất! Đã lấy tổng cộng ${allResults.length} bản ghi duy nhất.`);
     return allResults;
   }
 };
