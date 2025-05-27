@@ -260,3 +260,84 @@ const HANET_API_BASE_URL = process.env.HANET_API_BASE_URL;
 if (!HANET_API_BASE_URL) {
   console.error("Lỗi: Biến môi trường HANET_API_BASE_URL chưa được thiết lập.");
 }
+
+// Hàm lấy danh sách check-in từ API Hanet và xử lý kết quả
+async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices = '') {
+  try {
+    // Cần có token để truy cập API
+    const token = await tokenManager.getToken();
+    if (!token) {
+      throw new Error("Không có token xác thực hợp lệ");
+    }
+    
+    // Tạo URL truy vấn
+    let apiUrl = `${HANET_API_BASE_URL}/devicehistory?type=checkin&placeID=${placeId}`;
+    
+    // Thêm thời gian bắt đầu và kết thúc nếu có
+    if (dateFrom) {
+      apiUrl += `&date_from=${dateFrom}`;
+    }
+    if (dateTo) {
+      apiUrl += `&date_to=${dateTo}`;
+    }
+    
+    // Thêm danh sách thiết bị nếu có
+    if (devices && devices.trim() !== '') {
+      apiUrl += `&deviceID=${devices}`;
+    }
+    
+    console.log(`Gọi API: ${apiUrl}`);
+    
+    // Gọi API Hanet
+    const response = await axios.get(apiUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    
+    // Kiểm tra kết quả trả về
+    if (response.status === 200 && response.data) {
+      console.log(`Đã nhận ${response.data.length || 0} bản ghi thô từ API.`);
+      
+      // Lọc trùng các bản ghi dựa trên personID và thời gian check-in
+      const uniqueRecords = [];
+      const recordKeys = new Set();
+      
+      if (Array.isArray(response.data)) {
+        for (const record of response.data) {
+          // Tạo khóa duy nhất cho mỗi bản ghi
+          const recordKey = `${record.personID}_${record.checkinTime}`;
+          
+          if (!recordKeys.has(recordKey)) {
+            recordKeys.add(recordKey);
+            uniqueRecords.push(record);
+          }
+        }
+      }
+      
+      // Sắp xếp các bản ghi theo thời gian check-in
+      uniqueRecords.sort((a, b) => a.checkinTime - b.checkinTime);
+      
+      console.log(`Hoàn tất! Sau khi lọc trùng còn ${uniqueRecords.length} bản ghi duy nhất.`);
+      
+      // Sử dụng hàm filterCheckinsByDay để xử lý dữ liệu
+      console.log(`Gọi filterCheckinsByDay với ${uniqueRecords.length} bản ghi.`);
+      const result = filterCheckinsByDay(uniqueRecords);
+      
+      console.log(`Kết quả cuối cùng sau khi xử lý: ${result.length} bản ghi.`);
+      return result;
+    }
+    
+    // Trả về mảng rỗng nếu không có dữ liệu
+    return [];
+  } catch (error) {
+    console.error("Lỗi khi lấy danh sách check-in:", error.message);
+    throw error;
+  }
+}
+
+// Xuất các hàm cần thiết
+module.exports = {
+  getPeopleListByMethod,
+  filterCheckinsByDay
+};
