@@ -270,30 +270,42 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices = '') {
       throw new Error("Không có token xác thực hợp lệ");
     }
     
-    // Tạo URL truy vấn
-    let apiUrl = `${HANET_API_BASE_URL}/devicehistory?type=checkin&placeID=${placeId}`;
+    // Sử dụng đường dẫn API đúng
+    const apiUrl = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
+    
+    // Chuẩn bị dữ liệu cho yêu cầu
+    const requestData = {
+      token: token,
+      placeID: placeId
+    };
     
     // Thêm thời gian bắt đầu và kết thúc nếu có
     if (dateFrom) {
-      apiUrl += `&date_from=${dateFrom}`;
+      requestData.from = dateFrom;
     }
     if (dateTo) {
-      apiUrl += `&date_to=${dateTo}`;
+      requestData.to = dateTo;
     }
     
     // Thêm danh sách thiết bị nếu có
     if (devices && devices.trim() !== '') {
-      apiUrl += `&deviceID=${devices}`;
+      requestData.deviceID = devices;
     }
     
-    console.log(`Gọi API: ${apiUrl}`);
+    console.log(`Gọi API: ${apiUrl} với dữ liệu:`, requestData);
+    
+    // Cấu hình cho request
+    const config = {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      timeout: 15000,
+    };
     
     // Gọi API Hanet
-    const response = await axios.get(apiUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const response = await axios.post(
+      apiUrl,
+      qs.stringify(requestData),
+      config
+    );
     
     // Kiểm tra kết quả trả về
     if (response.status === 200 && response.data) {
