@@ -105,93 +105,138 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
     throw new Error("Không lấy được Access Token hợp lệ.");
   }
   
-  // Kiểm tra và giới hạn khoảng thời gian
+  // Kiểm tra khoảng thời gian
   const fromDate = new Date(parseInt(dateFrom, 10));
   const toDate = new Date(parseInt(dateTo, 10));
   const diffInHours = (toDate - fromDate) / (1000 * 60 * 60);
   
-  // Nếu khoảng thời gian quá lớn (>24 giờ), trả về lỗi hoặc giới hạn
-  if (diffInHours > 24) {
-    throw new Error("Khoảng thời gian tìm kiếm quá lớn. Vui lòng giới hạn trong tối đa 24 giờ để tránh timeout.");
-  }
+  // Giới hạn thời gian mỗi lần truy vấn API
+  const MAX_HOURS = 24;
+  const MAX_PAGES = 5; // Giới hạn số trang tối đa mỗi lần truy vấn
   
-  let rawCheckinData = [];
-  // Giới hạn số trang tối đa để tránh timeout
-  const MAX_PAGES = 5;
-  
-  for (let index = 1; index <= MAX_PAGES; index++) {
-    const apiUrl = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
-    const requestData = {
-      token: accessToken,
-      placeID: placeId,
-      from: dateFrom,
-      to: dateTo,
-      ...(devices && { devices: devices }),
-      size: 500,
-      page: index,
-    };
-    const config = {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      timeout: 8000, // Giảm timeout để đảm bảo serverless function có thể phản hồi
-    };
+  // Hàm thực hiện một lần truy vấn API trong khoảng thời gian nhỏ
+  const fetchSegment = async (startTime, endTime) => {
+    let segmentData = [];
+    
+    for (let index = 1; index <= MAX_PAGES; index++) {
+      const apiUrl = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
+      const requestData = {
+        token: accessToken,
+        placeID: placeId,
+        from: startTime,
+        to: endTime,
+        ...(devices && { devices: devices }),
+        size: 500,
+        page: index,
+      };
+      const config = {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 8000, // Giảm timeout để đảm bảo serverless function có thể phản hồi
+      };
 
-    try {
-      console.log(`Đang gọi HANET API cho placeID=${placeId}, trang ${index}/${MAX_PAGES}...`);
-      const response = await axios.post(
-        apiUrl,
-        qs.stringify(requestData),
-        config
-      );
-      if (response.data && typeof response.data.returnCode !== "undefined") {
-        if (response.data.returnCode === 1 || response.data.returnCode === 0) {
-          console.log(`Gọi HANET API thành công cho placeID=${placeId}.`);
-          if (Array.isArray(response.data.data)) {
-            if (response.data.data.length === 0) {
-              console.log(`Không còn dữ liệu ở trang ${index}, dừng truy vấn.`);
+      try {
+        console.log(`Đang gọi HANET API cho placeID=${placeId}, khoảng ${new Date(parseInt(startTime)).toISOString()} - ${new Date(parseInt(endTime)).toISOString()}, trang ${index}/${MAX_PAGES}...`);
+        const response = await axios.post(
+          apiUrl,
+          qs.stringify(requestData),
+          config
+        );
+        if (response.data && typeof response.data.returnCode !== "undefined") {
+          if (response.data.returnCode === 1 || response.data.returnCode === 0) {
+            if (Array.isArray(response.data.data)) {
+              if (response.data.data.length === 0) {
+                console.log(`Không còn dữ liệu ở trang ${index}, dừng truy vấn.`);
+                break;
+              }
+              segmentData = [...segmentData, ...response.data.data];
+              console.log(
+                `Đã nhận ${response.data.data.length} bản ghi check-in cho khoảng thời gian ${new Date(parseInt(startTime)).toLocaleString()} - ${new Date(parseInt(endTime)).toLocaleString()}.`
+              );
+            } else {
+              console.warn(`Dữ liệu trả về không phải mảng hoặc không có.`);
               break;
             }
-            rawCheckinData = [...rawCheckinData, ...response.data.data];
-            console.log(
-              `Đã nhận tổng cộng ${rawCheckinData.length} bản ghi check-in.`
-            );
           } else {
-            console.warn(
-              `Dữ liệu trả về cho placeID ${placeId} không phải mảng hoặc không có.`
+            console.error(
+              `Lỗi logic từ HANET: Mã lỗi ${response.data.returnCode}, Thông điệp: ${response.data.returnMessage || "N/A"}`
             );
-            break;
           }
         } else {
+          console.error(`Response không hợp lệ từ HANET:`, response.data);
+        }
+      } catch (error) {
+        if (error.code === "ECONNABORTED") {
+          console.error(`Lỗi timeout khi gọi API.`);
+        } else {
           console.error(
-            `Lỗi logic từ HANET cho placeID=${placeId}: Mã lỗi ${
-              response.data.returnCode
-            }, Thông điệp: ${response.data.returnMessage || "N/A"}`
+            `Lỗi mạng/request:`, error.response?.data || error.message
           );
         }
-      } else {
-        console.error(
-          `Response không hợp lệ từ HANET cho placeID=${placeId}:`,
-          response.data
-        );
+        console.warn(`Không lấy được dữ liệu do lỗi request.`);
+        break;
       }
-    } catch (error) {
-      if (error.code === "ECONNABORTED") {
-        console.error(`Lỗi timeout khi gọi API cho placeID=${placeId}.`);
-      } else {
-        console.error(
-          `Lỗi mạng/request khi gọi ${apiUrl} cho placeID=${placeId}:`,
-          error.response?.data || error.message
-        );
-      }
-      console.warn(
-        `Không lấy được dữ liệu cho địa điểm ${placeId} do lỗi request.`
-      );
-      break; // Dừng nếu có lỗi để tránh tiếp tục làm chậm phản hồi
     }
+    
+    return segmentData;
+  };
+  
+  // Nếu khoảng thời gian nhỏ hơn hoặc bằng 24 giờ, thực hiện bình thường
+  if (diffInHours <= MAX_HOURS) {
+    console.log(`Khoảng thời gian nhỏ hơn ${MAX_HOURS} giờ, thực hiện truy vấn trực tiếp.`);
+    const rawCheckinData = await fetchSegment(dateFrom, dateTo);
+    return filterCheckinsByDay({ data: rawCheckinData });
+  }
+  
+  // Nếu khoảng thời gian lớn hơn 24 giờ, chia nhỏ thành nhiều lần truy vấn
+  console.log(`Khoảng thời gian lớn (${diffInHours.toFixed(1)} giờ), chia nhỏ thành nhiều lần truy vấn.`);
+  
+  // Tính số lần cần chia
+  const segmentCount = Math.ceil(diffInHours / MAX_HOURS);
+  const segmentMs = Math.floor((toDate - fromDate) / segmentCount);
+  
+  console.log(`Sẽ thực hiện ${segmentCount} lần truy vấn để lấy dữ liệu.`);
+  
+  // Thực hiện nhiều lần truy vấn và kết hợp kết quả
+  let allCheckinData = [];
+  
+  // Lưu trữ các bản ghi duy nhất bằng Map
+  const uniqueRecords = new Map();
+  
+  for (let i = 0; i < segmentCount; i++) {
+    const segmentStart = fromDate.getTime() + (i * segmentMs);
+    const segmentEnd = (i === segmentCount - 1) 
+      ? toDate.getTime() 
+      : fromDate.getTime() + ((i + 1) * segmentMs) - 1;
+    
+    console.log(`Đang xử lý phần ${i+1}/${segmentCount}: ${new Date(segmentStart).toLocaleString()} - ${new Date(segmentEnd).toLocaleString()}`);
+    
+    try {
+      const segmentData = await fetchSegment(segmentStart.toString(), segmentEnd.toString());
+      
+      // Lưu trữ các bản ghi duy nhất dựa trên personID và checkinTime
+      for (const record of segmentData) {
+        if (record.personID && record.checkinTime) {
+          const key = `${record.personID}_${record.checkinTime}`;
+          if (!uniqueRecords.has(key)) {
+            uniqueRecords.set(key, record);
+          }
+        }
+      }
+      
+      console.log(`Đã xử lý xong phần ${i+1}/${segmentCount}, tổng số bản ghi duy nhất: ${uniqueRecords.size}`);
+    } catch (error) {
+      console.error(`Lỗi khi xử lý phần ${i+1}/${segmentCount}:`, error.message);
+    }
+  }
+  
+  // Chuyển Map thành mảng
+  allCheckinData = Array.from(uniqueRecords.values());
+  
+  console.log(`Hoàn tất! Đã lấy tổng cộng ${allCheckinData.length} bản ghi duy nhất.`);
+  
+  return filterCheckinsByDay({ data: allCheckinData });
 }
-
-return filterCheckinsByDay({ data: rawCheckinData });
 // Trả về mảng JSON thay vì đối tượng phân theo ngày
-}
 
 module.exports = {
 getPeopleListByMethod,
