@@ -5,12 +5,12 @@ function filterCheckinsByDay(data) {
     
     // Xử lý trường hợp data là mảng trực tiếp (khi gọi trực tiếp API)
     if (Array.isArray(data)) {
-      console.log('Nhận dữ liệu dạng mảng trực tiếp');
+      console.log('Nhận dữ liệu dạng mảng trực tiếp, số lượng: ' + data.length);
       validData = data;
     }
     // Xử lý trường hợp data có cấu trúc {data: [...]} (từ một số nguồn khác)
     else if (data && data.data && Array.isArray(data.data)) {
-      console.log('Nhận dữ liệu dạng {data: [...]}');
+      console.log('Nhận dữ liệu dạng {data: [...]}, số lượng: ' + data.data.length);
       validData = data.data;
     } 
     // Nếu không phải cả hai dạng trên, trả về mảng rỗng
@@ -18,6 +18,17 @@ function filterCheckinsByDay(data) {
       console.error("Dữ liệu đầu vào không hợp lệ!", typeof data, data);
       return [];
     }
+    
+    // Sao chép dữ liệu để tránh thay đổi dữ liệu gốc
+    validData = JSON.parse(JSON.stringify(validData));
+    
+    // Bổ sung trường date nếu chưa có
+    validData.forEach(item => {
+      if (!item.date && item.checkinTime) {
+        const checkinDate = new Date(parseInt(item.checkinTime));
+        item.date = `${checkinDate.getFullYear()}-${String(checkinDate.getMonth() + 1).padStart(2, '0')}-${String(checkinDate.getDate()).padStart(2, '0')}`;
+      }
+    });
     
     console.log(`Xử lý ${validData.length} bản ghi thô...`);
     
@@ -32,13 +43,22 @@ function filterCheckinsByDay(data) {
     
     console.log(`Sau khi lọc, còn lại ${validCheckins.length} bản ghi hợp lệ.`);
 
+    // In thông tin debug để kiểm tra
+    console.log(`Danh sách bản ghi hợp lệ: ${validCheckins.length} bản ghi.`);
+    
     // Tạo một đối tượng tạm để theo dõi check-in và check-out của mỗi người theo ngày
     const checksByPerson = {};
 
-    // Sắp xếp các lần check theo thời gian
-    validCheckins.sort((a, b) => a.checkinTime - b.checkinTime);
+    // Đảm bảo các bản ghi được sắp xếp theo thời gian
+    validCheckins.sort((a, b) => parseInt(a.checkinTime) - parseInt(b.checkinTime));
 
+    // Xử lý từng bản ghi check-in
     validCheckins.forEach((check) => {
+      if (!check.date) {
+        const checkinDate = new Date(parseInt(check.checkinTime));
+        check.date = `${checkinDate.getFullYear()}-${String(checkinDate.getMonth() + 1).padStart(2, '0')}-${String(checkinDate.getDate()).padStart(2, '0')}`;
+      }
+      
       const date = check.date;
       const personKey = `${date}_${check.personID}`;
 
@@ -82,12 +102,45 @@ function filterCheckinsByDay(data) {
         record.checkoutTime = null;
         record.formattedCheckoutTime = null;
       }
+      
+      // Thêm tính toán thời gian làm việc
+      if (record.checkinTime && record.checkoutTime) {
+        const checkinMs = parseInt(record.checkinTime);
+        const checkoutMs = parseInt(record.checkoutTime);
+        const workingTimeMs = checkoutMs - checkinMs;
+        
+        // Tính thời gian làm việc theo giờ và phút
+        const workingHours = Math.floor(workingTimeMs / (1000 * 60 * 60));
+        const workingMinutes = Math.floor((workingTimeMs % (1000 * 60 * 60)) / (1000 * 60));
+        record.workingTime = `${workingHours}h ${workingMinutes}m`;
+      } else {
+        record.workingTime = null;
+      }
+      
+      // Chuyển đổi dạng ngày tháng hợp lệ cho giao diện hiển thị
+      if (record.formattedCheckinTime) {
+        const checkinDate = new Date(parseInt(record.checkinTime));
+        const checkinDay = checkinDate.getDate().toString().padStart(2, '0');
+        const checkinMonth = (checkinDate.getMonth() + 1).toString().padStart(2, '0');
+        const checkinYear = checkinDate.getFullYear();
+        record.formattedCheckinTime = `${record.formattedCheckinTime} ${checkinDay}/${checkinMonth}/${checkinYear}`;
+      }
+      
+      if (record.formattedCheckoutTime) {
+        const checkoutDate = new Date(parseInt(record.checkoutTime));
+        const checkoutDay = checkoutDate.getDate().toString().padStart(2, '0');
+        const checkoutMonth = (checkoutDate.getMonth() + 1).toString().padStart(2, '0');
+        const checkoutYear = checkoutDate.getFullYear();
+        record.formattedCheckoutTime = `${record.formattedCheckoutTime} ${checkoutDay}/${checkoutMonth}/${checkoutYear}`;
+      }
     });
-
+    
+    // Đảm bảo sắp xếp theo thời gian check-in
     const result = Object.values(checksByPerson).sort(
-      (a, b) => a.checkinTime - b.checkinTime
+      (a, b) => parseInt(a.checkinTime) - parseInt(b.checkinTime)
     );
-
+    
+    console.log(`Kết quả cuối cùng: ${result.length} bản ghi.`);
     return result;
   } catch (error) {
     console.error("Lỗi khi xử lý dữ liệu:", error);
