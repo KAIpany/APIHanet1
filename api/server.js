@@ -155,20 +155,26 @@ app.get("/api/checkins", validateCheckinParams, async (req, res, next) => {
       }`
     );
 
-    const filteredCheckins = await hanetServiceId.getPeopleListByMethod(
+    // Gọi hàm lấy dữ liệu nhưng bỏ qua bước lọc và xử lý
+    const rawData = await hanetServiceId.getRawCheckinData(
       placeId,
       fromTimestamp,
       toTimestamp,
       devices
     );
 
+    // Sắp xếp dữ liệu trước khi trả về
+    const sortedData = Array.isArray(rawData) ? 
+      rawData.sort((a, b) => parseInt(a.checkinTime) - parseInt(b.checkinTime)) : 
+      [];
+
     console.log(
       `[${new Date().toISOString()}] Trả về ${
-        Array.isArray(filteredCheckins) ? filteredCheckins.length : "kết quả"
-      } checkin.`
+        sortedData.length
+      } bản ghi thô.`
     );
 
-    res.status(200).json(filteredCheckins);
+    res.status(200).json(sortedData);
   } catch (err) {
     next(err);
   }

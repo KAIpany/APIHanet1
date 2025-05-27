@@ -371,6 +371,202 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
 }
 // Trả về mảng JSON thay vì đối tượng phân theo ngày
 
+// Hàm lấy dữ liệu thô từ API Hanet mà không qua bước xử lý phức tạp
+async function getRawCheckinData(placeId, dateFrom, dateTo, devices) {
+  let accessToken;
+  try {
+    accessToken = await tokenManager.getValidHanetToken();
+  } catch (refreshError) {
+    console.error("Không thể lấy được token hợp lệ:", refreshError.message);
+    throw new Error(`Lỗi xác thực với HANET: ${refreshError.message}`);
+  }
+  if (!accessToken) {
+    throw new Error("Không lấy được Access Token hợp lệ.");
+  }
+  
+  // Giới hạn thời gian mỗi lần truy vấn API
+  const MAX_HOURS = 24;
+  const MAX_PAGES = 20; // Tăng giới hạn số trang để lấy đầy đủ dữ liệu hơn
+  
+  // Hàm thử lại truy vấn khi gặp lỗi
+  const fetchWithRetry = async (url, data, maxRetries = 2) => {
+    let lastError;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          console.log(`Thử lại lần ${attempt} cho truy vấn API...`);
+          // Chờ 1 giây trước khi thử lại
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        const config = {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          timeout: 9000, // Tăng timeout cho phép trả về nhiều dữ liệu hơn
+        };
+        
+        const response = await axios.post(url, qs.stringify(data), config);
+        return response;
+      } catch (error) {
+        lastError = error;
+        console.warn(`Lỗi lần thử ${attempt + 1}/${maxRetries}:`, error.message);
+      }
+    }
+    
+    throw lastError;
+  };
+  
+  // Kiểm tra khoảng thời gian
+  const fromDate = new Date(parseInt(dateFrom, 10));
+  const toDate = new Date(parseInt(dateTo, 10));
+  const diffInHours = (toDate - fromDate) / (1000 * 60 * 60);
+  
+  // Nếu khoảng thời gian nhỏ hơn hoặc bằng 24 giờ, thực hiện bình thường
+  if (diffInHours <= MAX_HOURS) {
+    console.log(`Khoảng thời gian nhỏ hơn ${MAX_HOURS} giờ, lấy dữ liệu trực tiếp.`);
+    
+    let allRecords = [];
+    
+    for (let index = 1; index <= MAX_PAGES; index++) {
+      const apiUrl = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
+      const requestData = {
+        token: accessToken,
+        placeID: placeId,
+        from: dateFrom,
+        to: dateTo,
+        ...(devices && { devices: devices }),
+        size: 500,
+        page: index,
+      };
+      
+      try {
+        // Gọi API
+        console.log(`Đang gọi API Hanet, trang ${index}/${MAX_PAGES}...`);
+        const response = await fetchWithRetry(apiUrl, requestData);
+        
+        if (response.data && Array.isArray(response.data.data)) {
+          const pageData = response.data.data;
+          
+          if (pageData.length === 0) {
+            console.log(`Không còn dữ liệu ở trang ${index}, dừng truy vấn.`);
+            break;
+          }
+          
+          allRecords = [...allRecords, ...pageData];
+          console.log(`Đã nhận ${pageData.length} bản ghi từ trang ${index}, tổng cộng: ${allRecords.length}`);
+          
+          // Nếu số bản ghi nhỏ hơn kích thước trang, có thể đã hết dữ liệu
+          if (pageData.length < 500) {
+            console.log(`Đã nhận ${pageData.length} bản ghi < 500, có thể đã hết dữ liệu.`);
+            break;
+          }
+        } else {
+          console.warn(`Không phải dữ liệu mảng hoặc không có dữ liệu.`);
+          break;
+        }
+      } catch (error) {
+        console.error(`Lỗi khi lấy dữ liệu trang ${index}:`, error.message);
+        break;
+      }
+    }
+    
+    return allRecords;
+  }
+  
+  // Nếu khoảng thời gian lớn hơn 24 giờ, chia nhỏ thành nhiều lần truy vấn
+  console.log(`Khoảng thời gian lớn (${diffInHours.toFixed(1)} giờ), chia nhỏ thành nhiều lần truy vấn.`);
+  
+  // Chia khoảng thời gian lớn hơn thành các đoạn nhỏ hơn
+  // Chia nhỏ hơn với các phần chồng lấn để đảm bảo không bỏ sót dữ liệu
+  const segmentCount = Math.ceil(diffInHours / (MAX_HOURS * 0.95)); // Giảm kích thước mỗi đoạn xuống 95% để có chồng lấp
+  const segmentMs = Math.floor((toDate - fromDate) / segmentCount);
+  const overlap = Math.floor(segmentMs * 0.05); // Chồng lấp 5% giữa các đoạn
+  
+  console.log(`Sẽ thực hiện ${segmentCount} lần truy vấn với chồng lấp để đảm bảo độ phủ.`);
+  
+  // Lưu trữ tất cả dữ liệu
+  let allRecords = [];
+  
+  // Lưu bản ghi duy nhất để tránh trùng lặp
+  const uniqueMap = {};
+  
+  // Xử lý từng đoạn thời gian
+  for (let i = 0; i < segmentCount; i++) {
+    // Tính toán điểm bắt đầu và kết thúc của mỗi đoạn
+    let segmentStart = fromDate.getTime() + (i * segmentMs);
+    if (i > 0) {
+      segmentStart -= overlap; // Trừ đi phần chồng lấp cho các đoạn sau đoạn đầu tiên
+    }
+    
+    let segmentEnd;
+    if (i === segmentCount - 1) {
+      segmentEnd = toDate.getTime(); // Đảm bảo đoạn cuối cùng bao gồm toàn bộ thời gian còn lại
+    } else {
+      segmentEnd = fromDate.getTime() + ((i + 1) * segmentMs);
+    }
+    
+    console.log(`Đang xử lý phần ${i+1}/${segmentCount}: ${new Date(segmentStart).toLocaleString()} - ${new Date(segmentEnd).toLocaleString()}`);
+    
+    // Lấy dữ liệu cho đoạn thời gian này
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const apiUrl = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
+      const requestData = {
+        token: accessToken,
+        placeID: placeId,
+        from: segmentStart.toString(),
+        to: segmentEnd.toString(),
+        ...(devices && { devices: devices }),
+        size: 500,
+        page: page,
+      };
+      
+      try {
+        // Gọi API
+        console.log(`Đang gọi API Hanet, đoạn ${i+1}/${segmentCount}, trang ${page}/${MAX_PAGES}...`);
+        const response = await fetchWithRetry(apiUrl, requestData);
+        
+        if (response.data && Array.isArray(response.data.data)) {
+          const pageData = response.data.data;
+          
+          if (pageData.length === 0) {
+            console.log(`Không còn dữ liệu ở trang ${page} đoạn ${i+1}, chuyển sang đoạn tiếp theo.`);
+            break;
+          }
+          
+          // Thêm vào mảng kết quả và loại bỏ trùng lặp
+          for (const record of pageData) {
+            if (record.personID && record.checkinTime) {
+              const key = `${record.personID}_${record.checkinTime}`;
+              if (!uniqueMap[key]) {
+                uniqueMap[key] = true;
+                allRecords.push(record);
+              }
+            }
+          }
+          
+          console.log(`Đã nhận ${pageData.length} bản ghi từ trang ${page}, tổng cộng hiện tại: ${allRecords.length}`);
+          
+          // Nếu số bản ghi nhỏ hơn kích thước trang, có thể đã hết dữ liệu
+          if (pageData.length < 500) {
+            console.log(`Đã nhận ${pageData.length} bản ghi < 500, chuyển sang đoạn tiếp theo.`);
+            break;
+          }
+        } else {
+          console.warn(`Không phải dữ liệu mảng hoặc không có dữ liệu.`);
+          break;
+        }
+      } catch (error) {
+        console.error(`Lỗi khi lấy dữ liệu trang ${page} đoạn ${i+1}:`, error.message);
+        break;
+      }
+    }
+  }
+  
+  console.log(`Hoàn tất! Đã lấy tổng cộng ${allRecords.length} bản ghi duy nhất.`);
+  return allRecords;
+}
+
 module.exports = {
-getPeopleListByMethod,
+  getPeopleListByMethod,
+  getRawCheckinData
 };
