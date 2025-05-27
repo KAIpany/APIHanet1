@@ -265,7 +265,7 @@ if (!HANET_API_BASE_URL) {
 async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices = '') {
   try {
     // Cần có token để truy cập API
-    const token = await tokenManager.getToken();
+    const token = await tokenManager.getValidHanetToken();
     if (!token) {
       throw new Error("Không có token xác thực hợp lệ");
     }
