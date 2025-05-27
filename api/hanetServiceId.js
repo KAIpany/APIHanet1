@@ -309,21 +309,35 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices = '') {
     
     // Kiểm tra kết quả trả về
     if (response.status === 200 && response.data) {
-      console.log(`Đã nhận ${response.data.length || 0} bản ghi thô từ API.`);
+      console.log('Phản hồi từ API:', JSON.stringify(response.data).substring(0, 200) + '...');
+      
+      // API Hanet trả về cấu trúc {returnCode, data}
+      let validRecords = [];
+      
+      if (response.data.returnCode === 1 || response.data.returnCode === 0) {
+        if (Array.isArray(response.data.data)) {
+          validRecords = response.data.data;
+          console.log(`Đã nhận ${validRecords.length} bản ghi thô từ API.`);
+        } else {
+          console.warn('Dữ liệu trả về từ API không phải mảng:', response.data);
+          return [];
+        }
+      } else {
+        console.error('Lỗi từ API Hanet:', response.data);
+        return [];
+      }
       
       // Lọc trùng các bản ghi dựa trên personID và thời gian check-in
       const uniqueRecords = [];
       const recordKeys = new Set();
       
-      if (Array.isArray(response.data)) {
-        for (const record of response.data) {
-          // Tạo khóa duy nhất cho mỗi bản ghi
-          const recordKey = `${record.personID}_${record.checkinTime}`;
-          
-          if (!recordKeys.has(recordKey)) {
-            recordKeys.add(recordKey);
-            uniqueRecords.push(record);
-          }
+      for (const record of validRecords) {
+        // Tạo khóa duy nhất cho mỗi bản ghi
+        const recordKey = `${record.personID}_${record.checkinTime}`;
+        
+        if (!recordKeys.has(recordKey)) {
+          recordKeys.add(recordKey);
+          uniqueRecords.push(record);
         }
       }
       
