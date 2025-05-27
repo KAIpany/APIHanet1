@@ -190,29 +190,72 @@ const apiService = {
     const fromTimestamp = new Date(fromDateTime).getTime();
     const toTimestamp = new Date(toDateTime).getTime();
     
-    // Kiểm tra khoảng thời gian để tránh timeout ở môi trường serverless
+    // Kiểm tra khoảng thời gian để phát hiện có cần chia nhỏ hay không
     const diffInHours = (toTimestamp - fromTimestamp) / (1000 * 60 * 60);
-    if (diffInHours > 24) {
-      throw new Error('Khoảng thời gian tìm kiếm quá lớn. Vui lòng giới hạn trong tối đa 24 giờ để tránh timeout.');
-    }
+    const MAX_HOURS = 24; // Giới hạn mỗi lần truy vấn
     
-    let url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${fromTimestamp}&dateTo=${toTimestamp}`;
-    if (deviceId) {
-      url += `&devices=${deviceId}`;
-    }
-    
-    try {
-      const response = await fetchWithAuth(url);
-      return response;
-    } catch (error) {
-      // Xử lý lỗi timeout cụ thể
-      if (error.message && (error.message.includes('timeout') || 
-          error.message.includes('FUNCTION_INVOCATION_TIMEOUT') ||
-          error.message.includes('Gateway Timeout'))) {
-        throw new Error('Yêu cầu mất quá nhiều thời gian để xử lý. Vui lòng thử lại với khoảng thời gian ngắn hơn hoặc bộ lọc cụ thể hơn.');
+    // Nếu khoảng thời gian nhỏ hơn 24 giờ, thực hiện truy vấn bình thường
+    if (diffInHours <= MAX_HOURS) {
+      let url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${fromTimestamp}&dateTo=${toTimestamp}`;
+      if (deviceId) {
+        url += `&devices=${deviceId}`;
       }
-      throw error;
+      
+      try {
+        return await fetchWithAuth(url);
+      } catch (error) {
+        if (error.message && (error.message.includes('timeout') || 
+            error.message.includes('FUNCTION_INVOCATION_TIMEOUT') ||
+            error.message.includes('Gateway Timeout'))) {
+          throw new Error('Yêu cầu mất quá nhiều thời gian để xử lý. Vui lòng thử với khoảng thời gian ngắn hơn.');
+        }
+        throw error;
+      }
     }
+    
+    // Nếu khoảng thời gian lớn hơn, chia nhỏ thành nhiều lần truy vấn
+    console.log(`Khoảng thời gian lớn (${diffInHours.toFixed(1)} giờ), chia nhỏ thành nhiều lần truy vấn`);
+    
+    // Tính số lần cần chia
+    const segmentCount = Math.ceil(diffInHours / MAX_HOURS);
+    const segmentMs = Math.floor((toTimestamp - fromTimestamp) / segmentCount);
+    
+    // Hiển thị thông báo cho người dùng
+    console.log(`Đang thực hiện ${segmentCount} lần truy vấn để lấy dữ liệu từ ${new Date(fromTimestamp).toLocaleString()} đến ${new Date(toTimestamp).toLocaleString()}`);
+    
+    // Thực hiện nhiều lần truy vấn và kết hợp kết quả
+    let allResults = [];
+    let errors = [];
+    
+    for (let i = 0; i < segmentCount; i++) {
+      const start = fromTimestamp + (i * segmentMs);
+      const end = (i === segmentCount - 1) ? toTimestamp : fromTimestamp + ((i + 1) * segmentMs) - 1;
+      
+      console.log(`Đang lấy dữ liệu phần ${i+1}/${segmentCount}: ${new Date(start).toLocaleString()} - ${new Date(end).toLocaleString()}`);
+      
+      let url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${start}&dateTo=${end}`;
+      if (deviceId) {
+        url += `&devices=${deviceId}`;
+      }
+      
+      try {
+        const segmentResult = await fetchWithAuth(url);
+        if (Array.isArray(segmentResult)) {
+          console.log(`Đã nhận ${segmentResult.length} bản ghi từ phần ${i+1}/${segmentCount}`);
+          allResults = [...allResults, ...segmentResult];
+        }
+      } catch (error) {
+        console.error(`Lỗi khi lấy dữ liệu phần ${i+1}/${segmentCount}:`, error.message);
+        errors.push(`Phần ${i+1}: ${error.message}`);
+      }
+    }
+    
+    if (allResults.length === 0 && errors.length > 0) {
+      throw new Error(`Không thể lấy dữ liệu. Lỗi: ${errors.join(', ')}`);
+    }
+    
+    console.log(`Hoàn tất! Đã lấy tổng cộng ${allResults.length} bản ghi.`);
+    return allResults;
   }
 };
 
