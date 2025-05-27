@@ -190,12 +190,29 @@ const apiService = {
     const fromTimestamp = new Date(fromDateTime).getTime();
     const toTimestamp = new Date(toDateTime).getTime();
     
+    // Kiểm tra khoảng thời gian để tránh timeout ở môi trường serverless
+    const diffInHours = (toTimestamp - fromTimestamp) / (1000 * 60 * 60);
+    if (diffInHours > 24) {
+      throw new Error('Khoảng thời gian tìm kiếm quá lớn. Vui lòng giới hạn trong tối đa 24 giờ để tránh timeout.');
+    }
+    
     let url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${fromTimestamp}&dateTo=${toTimestamp}`;
     if (deviceId) {
       url += `&devices=${deviceId}`;
     }
     
-    return await fetchWithAuth(url);
+    try {
+      const response = await fetchWithAuth(url);
+      return response;
+    } catch (error) {
+      // Xử lý lỗi timeout cụ thể
+      if (error.message && (error.message.includes('timeout') || 
+          error.message.includes('FUNCTION_INVOCATION_TIMEOUT') ||
+          error.message.includes('Gateway Timeout'))) {
+        throw new Error('Yêu cầu mất quá nhiều thời gian để xử lý. Vui lòng thử lại với khoảng thời gian ngắn hơn hoặc bộ lọc cụ thể hơn.');
+      }
+      throw error;
+    }
   }
 };
 
