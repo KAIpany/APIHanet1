@@ -1,17 +1,36 @@
 function filterCheckinsByDay(data) {
   try {
-    if (!data || !data.data || !Array.isArray(data.data)) {
-      console.error("Dữ liệu đầu vào không hợp lệ!");
+    // Kiểm tra xem dữ liệu đầu vào có hợp lệ không
+    let validData = [];
+    
+    // Xử lý trường hợp data là mảng trực tiếp (khi gọi trực tiếp API)
+    if (Array.isArray(data)) {
+      console.log('Nhận dữ liệu dạng mảng trực tiếp');
+      validData = data;
+    }
+    // Xử lý trường hợp data có cấu trúc {data: [...]} (từ một số nguồn khác)
+    else if (data && data.data && Array.isArray(data.data)) {
+      console.log('Nhận dữ liệu dạng {data: [...]}');
+      validData = data.data;
+    } 
+    // Nếu không phải cả hai dạng trên, trả về mảng rỗng
+    else {
+      console.error("Dữ liệu đầu vào không hợp lệ!", typeof data, data);
       return [];
     }
-
-    const validCheckins = data.data.filter(
+    
+    console.log(`Xử lý ${validData.length} bản ghi thô...`);
+    
+    // Lọc bỏ các bản ghi không hợp lệ
+    const validCheckins = validData.filter(
       (item) =>
         item.personID &&
         item.personID !== "" &&
         item.personName &&
         item.personName !== ""
     );
+    
+    console.log(`Sau khi lọc, còn lại ${validCheckins.length} bản ghi hợp lệ.`);
 
     // Tạo một đối tượng tạm để theo dõi check-in và check-out của mỗi người theo ngày
     const checksByPerson = {};
@@ -222,7 +241,8 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
   if (diffInHours <= MAX_HOURS) {
     console.log(`Khoảng thời gian nhỏ hơn ${MAX_HOURS} giờ, thực hiện truy vấn trực tiếp.`);
     const rawCheckinData = await fetchSegment(dateFrom, dateTo);
-    return filterCheckinsByDay({ data: rawCheckinData });
+    console.log(`Gọi filterCheckinsByDay với ${rawCheckinData.length} bản ghi trực tiếp.`);
+    return filterCheckinsByDay(rawCheckinData);
   }
   
   // Nếu khoảng thời gian lớn hơn 24 giờ, chia nhỏ thành nhiều lần truy vấn
@@ -290,7 +310,8 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
   console.log(`Hoàn tất! Sau khi lọc trùng còn ${uniqueRecords.length} bản ghi duy nhất.`);
   
   // Sử dụng hàm filterCheckinsByDay để xử lý dữ liệu
-  const result = filterCheckinsByDay({ data: uniqueRecords });
+  console.log(`Gọi filterCheckinsByDay với ${uniqueRecords.length} bản ghi.`);
+  const result = filterCheckinsByDay(uniqueRecords);
   
   console.log(`Kết quả cuối cùng sau khi xử lý: ${result.length} bản ghi.`);
   return result;
