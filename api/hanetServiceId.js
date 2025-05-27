@@ -25,8 +25,10 @@ function filterCheckinsByDay(data) {
     // Bổ sung trường date nếu chưa có
     validData.forEach(item => {
       if (!item.date && item.checkinTime) {
+        // Sử dụng múi giờ UTC+7 (Việt Nam)
         const checkinDate = new Date(parseInt(item.checkinTime));
-        item.date = `${checkinDate.getFullYear()}-${String(checkinDate.getMonth() + 1).padStart(2, '0')}-${String(checkinDate.getDate()).padStart(2, '0')}`;
+        const vietnamDate = convertToVietnamTime(checkinDate);
+        item.date = `${vietnamDate.getFullYear()}-${String(vietnamDate.getMonth() + 1).padStart(2, '0')}-${String(vietnamDate.getDate()).padStart(2, '0')}`;
       }
     });
     
@@ -50,18 +52,27 @@ function filterCheckinsByDay(data) {
     const checksByPerson = {};
 
     // Đảm bảo các bản ghi được sắp xếp theo thời gian
-    validCheckins.sort((a, b) => parseInt(a.checkinTime) - parseInt(b.checkinTime));
+    validCheckins.sort((a, b) => {
+      // Chuyển đổi sang số để đảm bảo so sánh chính xác
+      const timeA = typeof a.checkinTime === 'string' ? parseInt(a.checkinTime) : a.checkinTime;
+      const timeB = typeof b.checkinTime === 'string' ? parseInt(b.checkinTime) : b.checkinTime;
+      return timeA - timeB;
+    });
 
+    // Lưu danh sách personKey đã xử lý để đảm bảo không trùng lặp
+    const processedKeys = new Set();
+    
     // Xử lý từng bản ghi check-in
     validCheckins.forEach((check) => {
       if (!check.date) {
         const checkinDate = new Date(parseInt(check.checkinTime));
-        check.date = `${checkinDate.getFullYear()}-${String(checkinDate.getMonth() + 1).padStart(2, '0')}-${String(checkinDate.getDate()).padStart(2, '0')}`;
+        const vietnamDate = convertToVietnamTime(checkinDate);
+        check.date = `${vietnamDate.getFullYear()}-${String(vietnamDate.getMonth() + 1).padStart(2, '0')}-${String(vietnamDate.getDate()).padStart(2, '0')}`;
       }
       
       const date = check.date;
       const personKey = `${date}_${check.personID}`;
-
+      
       // Format thông tin người check
       const personInfo = {
         personName: check.personName !== undefined ? check.personName : "",
@@ -84,60 +95,68 @@ function filterCheckinsByDay(data) {
         checksByPerson[personKey] = {
           ...personInfo,
           checkinTime: check.checkinTime, // Lần check đầu tiên là check-in
-          checkoutTime: check.checkinTime, // Khởi tạo checkout time bằng thời gian check-in
-          formattedCheckinTime: formatTimestamp(check.checkinTime),
-          formattedCheckoutTime: formatTimestamp(check.checkinTime)
+          checkoutTime: null, // Ban đầu không có checkout
+          formattedCheckinTime: formatTimestampWithVietnamTime(check.checkinTime),
+          formattedCheckoutTime: null
         };
       } else {
-        // Nếu đã có thông tin, luôn cập nhật checkout time là lần check cuối cùng
+        // Nếu đã có thông tin, cập nhật checkout time là lần check cuối cùng
         checksByPerson[personKey].checkoutTime = check.checkinTime;
-        checksByPerson[personKey].formattedCheckoutTime = formatTimestamp(check.checkinTime);
+        checksByPerson[personKey].formattedCheckoutTime = formatTimestampWithVietnamTime(check.checkinTime);
       }
     });
 
-    // Xử lý các trường hợp checkout time trùng với checkin time
+    // Xử lý tính toán thời gian làm việc và định dạng thời gian
     Object.values(checksByPerson).forEach(record => {
-      if (record.checkinTime === record.checkoutTime) {
-        // Nếu chỉ có một lần check, đặt checkout time là null
-        record.checkoutTime = null;
-        record.formattedCheckoutTime = null;
-      }
-      
       // Thêm tính toán thời gian làm việc
       if (record.checkinTime && record.checkoutTime) {
-        const checkinMs = parseInt(record.checkinTime);
-        const checkoutMs = parseInt(record.checkoutTime);
-        const workingTimeMs = checkoutMs - checkinMs;
+        const checkinMs = typeof record.checkinTime === 'string' ? parseInt(record.checkinTime) : record.checkinTime;
+        const checkoutMs = typeof record.checkoutTime === 'string' ? parseInt(record.checkoutTime) : record.checkoutTime;
         
-        // Tính thời gian làm việc theo giờ và phút
-        const workingHours = Math.floor(workingTimeMs / (1000 * 60 * 60));
-        const workingMinutes = Math.floor((workingTimeMs % (1000 * 60 * 60)) / (1000 * 60));
-        record.workingTime = `${workingHours}h ${workingMinutes}m`;
+        // Nếu thời gian checkout <= checkin thì đặt checkout = null
+        if (checkoutMs <= checkinMs) {
+          record.checkoutTime = null;
+          record.formattedCheckoutTime = null;
+          record.workingTime = null;
+        } else {
+          const workingTimeMs = checkoutMs - checkinMs;
+          
+          // Tính thời gian làm việc theo giờ và phút
+          const workingHours = Math.floor(workingTimeMs / (1000 * 60 * 60));
+          const workingMinutes = Math.floor((workingTimeMs % (1000 * 60 * 60)) / (1000 * 60));
+          record.workingTime = `${workingHours}h ${workingMinutes}m`;
+        }
       } else {
         record.workingTime = null;
       }
       
-      // Chuyển đổi dạng ngày tháng hợp lệ cho giao diện hiển thị
+      // Thêm thông tin ngày tháng vào thời gian check-in/check-out
       if (record.formattedCheckinTime) {
         const checkinDate = new Date(parseInt(record.checkinTime));
-        const checkinDay = checkinDate.getDate().toString().padStart(2, '0');
-        const checkinMonth = (checkinDate.getMonth() + 1).toString().padStart(2, '0');
-        const checkinYear = checkinDate.getFullYear();
+        const vietnamDate = convertToVietnamTime(checkinDate);
+        const checkinDay = vietnamDate.getDate().toString().padStart(2, '0');
+        const checkinMonth = (vietnamDate.getMonth() + 1).toString().padStart(2, '0');
+        const checkinYear = vietnamDate.getFullYear();
         record.formattedCheckinTime = `${record.formattedCheckinTime} ${checkinDay}/${checkinMonth}/${checkinYear}`;
       }
       
       if (record.formattedCheckoutTime) {
         const checkoutDate = new Date(parseInt(record.checkoutTime));
-        const checkoutDay = checkoutDate.getDate().toString().padStart(2, '0');
-        const checkoutMonth = (checkoutDate.getMonth() + 1).toString().padStart(2, '0');
-        const checkoutYear = checkoutDate.getFullYear();
+        const vietnamDate = convertToVietnamTime(checkoutDate);
+        const checkoutDay = vietnamDate.getDate().toString().padStart(2, '0');
+        const checkoutMonth = (vietnamDate.getMonth() + 1).toString().padStart(2, '0');
+        const checkoutYear = vietnamDate.getFullYear();
         record.formattedCheckoutTime = `${record.formattedCheckoutTime} ${checkoutDay}/${checkoutMonth}/${checkoutYear}`;
       }
     });
     
     // Đảm bảo sắp xếp theo thời gian check-in
     const result = Object.values(checksByPerson).sort(
-      (a, b) => parseInt(a.checkinTime) - parseInt(b.checkinTime)
+      (a, b) => {
+        const timeA = typeof a.checkinTime === 'string' ? parseInt(a.checkinTime) : a.checkinTime;
+        const timeB = typeof b.checkinTime === 'string' ? parseInt(b.checkinTime) : b.checkinTime;
+        return timeA - timeB;
+      }
     );
     
     console.log(`Kết quả cuối cùng: ${result.length} bản ghi.`);
@@ -148,12 +167,31 @@ function filterCheckinsByDay(data) {
   }
 }
 
-function formatTimestamp(timestamp) {
-  const date = new Date(timestamp);
-  const hours = date.getHours().toString().padStart(2, "0");
-  const minutes = date.getMinutes().toString().padStart(2, "0");
-  const seconds = date.getSeconds().toString().padStart(2, "0");
+// Hàm chuyển đổi thời gian sang múi giờ Việt Nam (UTC+7)
+function convertToVietnamTime(date) {
+  // Thời gian UTC
+  const utcTime = date.getTime();
+  // Chênh lệch múi giờ Việt Nam so với UTC: +7 giờ
+  const vietnamOffset = 7 * 60 * 60 * 1000;
+  // Thời gian Việt Nam
+  return new Date(utcTime + vietnamOffset);
+}
+
+// Hàm định dạng timestamp sang định dạng giờ Việt Nam
+function formatTimestampWithVietnamTime(timestamp) {
+  const date = new Date(parseInt(timestamp));
+  const vietnamDate = convertToVietnamTime(date);
+  
+  const hours = vietnamDate.getHours().toString().padStart(2, "0");
+  const minutes = vietnamDate.getMinutes().toString().padStart(2, "0");
+  const seconds = vietnamDate.getSeconds().toString().padStart(2, "0");
+  
   return `${hours}:${minutes}:${seconds}`;
+}
+
+// Giữ lại hàm cũ để đảm bảo tương thích ngược nếu có nơi khác sử dụng
+function formatTimestamp(timestamp) {
+  return formatTimestampWithVietnamTime(timestamp);
 }
 
 require("dotenv").config();
