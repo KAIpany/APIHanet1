@@ -226,19 +226,6 @@ app.get("/api/checkins", validateCheckinParams, async (req, res, next) => {
       requestId: req.id
     });
 
-    // Validate time range
-    const timeDiff = (toTimestamp - fromTimestamp) / (1000 * 60 * 60); // Hours
-    if (timeDiff > 72) {
-      return res.status(400).json({
-        success: false,
-        message: 'Query time range cannot exceed 72 hours',
-        details: {
-          requestedHours: Math.round(timeDiff),
-          maxAllowedHours: 72
-        }
-      });
-    }
-
     // Performance monitoring
     const startTime = process.hrtime();
     
