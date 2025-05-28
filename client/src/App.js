@@ -1210,167 +1210,171 @@ const CheckInApp = () => {
           </Link>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="query-form">
-          {/* Place selection */}
-          <div className="form-group">
-            <label htmlFor="placeId" className="form-label required">
-              Địa điểm:
-            </label>
-            <select
-              id="placeId"
-              name="placeId"
-              value={formData.placeId}
-              onChange={handlePlaceChange}
-              className={isPlacesLoading ? "select-loading" : ""}
-              required
-              disabled={isPlacesLoading}
-            >
-              <option value="">
-                {isPlacesLoading ? "Đang tải địa điểm..." : "-- Chọn địa điểm --"}
-              </option>
-              {places.map((place) => (
-                <option key={place.id || place.placeID} value={place.id || place.placeID}>
-                  {place.name || place.placeName || "Unnamed"} (ID: {place.id || place.placeID})
+        <>
+          <form onSubmit={handleSubmit} className="query-form">
+            {/* Place selection */}
+            <div className="form-group">
+              <label htmlFor="placeId" className="form-label required">
+                Địa điểm:
+              </label>
+              <select
+                id="placeId"
+                name="placeId"
+                value={formData.placeId}
+                onChange={handlePlaceChange}
+                className={isPlacesLoading ? "select-loading" : ""}
+                required
+                disabled={isPlacesLoading}
+              >
+                <option value="">
+                  {isPlacesLoading ? "Đang tải địa điểm..." : "-- Chọn địa điểm --"}
                 </option>
-              ))}
-            </select>
-            {placeError && <p className="error-message">{placeError}</p>}
-          </div>
+                {places.map((place) => (
+                  <option key={place.id || place.placeID} value={place.id || place.placeID}>
+                    {place.name || place.placeName || "Unnamed"} (ID: {place.id || place.placeID})
+                  </option>
+                ))}
+              </select>
+              {placeError && <p className="error-message">{placeError}</p>}
+            </div>
 
-          {/* Device selection */}
-          <div className="form-group">
-            <label htmlFor="deviceId" className="form-label">
-              Thiết bị (Tùy chọn):
-            </label>
-            <select
-              id="deviceId"
-              name="deviceId"
-              value={formData.deviceId}
-              onChange={handleDeviceChange}
-              disabled={!formData.placeId || isDevicesLoading}
-              className={!formData.placeId || isDevicesLoading ? "select-disabled" : ""}
-            >
-              <option value="">
-                {!formData.placeId
-                  ? "-- Chọn địa điểm trước --"
-                  : isDevicesLoading
-                  ? "Đang tải thiết bị..."
-                  : "-- Chọn thiết bị (để lọc) --"}
-              </option>
-              {devices.map((device) => (
-                <option key={device.deviceID} value={device.deviceID}>
-                  {device.deviceName} (ID: {device.deviceID})
+            {/* Device selection */}
+            <div className="form-group">
+              <label htmlFor="deviceId" className="form-label">
+                Thiết bị (Tùy chọn):
+              </label>
+              <select
+                id="deviceId"
+                name="deviceId"
+                value={formData.deviceId}
+                onChange={handleDeviceChange}
+                disabled={!formData.placeId || isDevicesLoading}
+                className={!formData.placeId || isDevicesLoading ? "select-disabled" : ""}
+              >
+                <option value="">
+                  {!formData.placeId
+                    ? "-- Chọn địa điểm trước --"
+                    : isDevicesLoading
+                    ? "Đang tải thiết bị..."
+                    : "-- Chọn thiết bị (để lọc) --"}
                 </option>
-              ))}
-            </select>
-            {deviceError && <p className="error-message">{deviceError}</p>}
-          </div>
+                {devices.map((device) => (
+                  <option key={device.deviceID} value={device.deviceID}>
+                    {device.deviceName} (ID: {device.deviceID})
+                  </option>
+                ))}
+              </select>
+              {deviceError && <p className="error-message">{deviceError}</p>}
+            </div>
 
-          {/* --- Khu vực chọn thời gian --- */}
-          <div className="time-range-container">
-            <p className="section-title">Khoảng thời gian</p>
-            <div className="time-range-grid">
-              {/* Input From */}
-              <div className="form-group">
-                <label htmlFor="fromDateTime" className="form-label required">
-                  Từ:
-                </label>
-                <input
-                  type="datetime-local"
-                  id="fromDateTime"
-                  name="fromDateTime"
-                  value={formData.fromDateTime}
-                  onChange={handleChange}
-                />
+            {/* --- Khu vực chọn thời gian --- */}
+            <div className="time-range-container">
+              <p className="section-title">Khoảng thời gian</p>
+              <div className="time-range-grid">
+                {/* Input From */}
+                <div className="form-group">
+                  <label htmlFor="fromDateTime" className="form-label required">
+                    Từ:
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="fromDateTime"
+                    name="fromDateTime"
+                    value={formData.fromDateTime}
+                    onChange={handleChange}
+                  />
+                </div>
+                {/* Input To */}
+                <div className="form-group">
+                  <label htmlFor="toDateTime" className="form-label required">
+                    Đến:
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="toDateTime"
+                    name="toDateTime"
+                    value={formData.toDateTime}
+                    onChange={handleChange}
+                  />
+                </div>
               </div>
-              {/* Input To */}
-              <div className="form-group">
-                <label htmlFor="toDateTime" className="form-label required">
-                  Đến:
-                </label>
-                <input
-                  type="datetime-local"
-                  id="toDateTime"
-                  name="toDateTime"
-                  value={formData.toDateTime}
-                  onChange={handleChange}
-                />
+            </div>
+
+            {/* --- Input Tóm tắt --- */}
+            <div className="form-group">
+              <label htmlFor="summaryInput" className="form-label-sm">
+                Thông tin truy vấn:
+              </label>
+              <input
+                type="text"
+                id="summaryInput"
+                readOnly
+                value={`${process.env.REACT_APP_API_URL}/api/checkins?${queryString || ""}`}
+                className="summary-input"
+              />
+            </div>
+
+            {/* --- Thông báo Lỗi/Thành công Submit --- */}
+            {submitError && (
+              <div className="alert-error" role="alert">
+                <span className="alert-label">Lỗi: </span>
+                {submitError}
               </div>
-            </div>
-          </div>
+            )}
+            {successMessage && resultsData === null && (
+              <div className="alert-info" role="status">
+                <span>{successMessage}</span>
+              </div>
+            )}
 
-          {/* --- Input Tóm tắt --- */}
-          <div className="form-group">
-            <label htmlFor="summaryInput" className="form-label-sm">
-              Thông tin truy vấn:
-            </label>
-            <input
-              type="text"
-              id="summaryInput"
-              readOnly
-              value={`${process.env.REACT_APP_API_URL}/api/checkins?${queryString || ""}`}
-              className="summary-input"
-            />
-          </div>
+            {/* --- Nút Submit --- */}
+            <button
+              type="submit"
+              className={
+                isSubmitting || isPlacesLoading
+                  ? "submit-btn disabled"
+                  : "submit-btn"
+              }
+              disabled={isSubmitting || isPlacesLoading}
+            >
+              {isSubmitting ? "Đang tìm kiếm..." : "Tìm kiếm Check-in"}
+            </button>
+          </form>
 
-          {/* --- Thông báo Lỗi/Thành công Submit --- */}
-          {submitError && (
-            <div className="alert-error" role="alert">
-              <span className="alert-label">Lỗi: </span>
-              {submitError}
-            </div>
-          )}
-          {successMessage && resultsData === null && (
-            <div className="alert-info" role="status">
-              <span>{successMessage}</span>
-            </div>
-          )}
-
-          {/* --- Nút Submit --- */}
-          <button
-            type="submit"
-            className={
-              isSubmitting || isPlacesLoading
-                ? "submit-btn disabled"
-                : "submit-btn"
-            }
-            disabled={isSubmitting || isPlacesLoading}
-          >
-            {isSubmitting ? "Đang tìm kiếm..." : "Tìm kiếm Check-in"}
-          </button>
-
-          {/* Hiển thị kết quả check-in */}
+          {/* Hiển thị kết quả check-in tách riêng và căn giữa */}
           {resultsData && Array.isArray(resultsData) && resultsData.length > 0 && (
-            <div className="results-section">
-              <h3>Kết quả check-in:</h3>
-              <table className="results-table">
-                <thead>
-                  <tr>
-                    <th>STT</th>
-                    {Object.keys(resultsData[0]).map((key) => (
-                      <th key={key}>{key}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {resultsData.map((item, idx) => (
-                    <tr key={item.id || item._id || idx}>
-                      <td>{idx + 1}</td>
+            <div className="checkin-results-center">
+              <div className="results-section">
+                <h3>Kết quả check-in:</h3>
+                <table className="results-table">
+                  <thead>
+                    <tr>
+                      <th>STT</th>
                       {Object.keys(resultsData[0]).map((key) => (
-                        <td key={key}>{String(item[key] ?? '')}</td>
+                        <th key={key}>{key}</th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {/* Nếu muốn xem JSON thô */}
-              <details>
-                <summary>Xem dữ liệu thô (JSON)</summary>
-                <pre style={{maxHeight: 300, overflow: 'auto', background: '#f7f7f7', padding: 8}}>{JSON.stringify(resultsData, null, 2)}</pre>
-              </details>
+                  </thead>
+                  <tbody>
+                    {resultsData.map((item, idx) => (
+                      <tr key={item.id || item._id || idx}>
+                        <td>{idx + 1}</td>
+                        {Object.keys(resultsData[0]).map((key) => (
+                          <td key={key}>{String(item[key] ?? '')}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {/* Nếu muốn xem JSON thô */}
+                <details>
+                  <summary>Xem dữ liệu thô (JSON)</summary>
+                  <pre style={{maxHeight: 300, overflow: 'auto', background: '#f7f7f7', padding: 8}}>{JSON.stringify(resultsData, null, 2)}</pre>
+                </details>
+              </div>
             </div>
           )}
-        </form>
+        </>
       )}
     </main>
   );
