@@ -663,14 +663,18 @@ const CheckInApp = () => {
     setPlaceError(null);
     setPlaces([]);
     try {
-      // Sử dụng apiService để lấy danh sách địa điểm với tự động làm mới xác thực
-      const result = await apiService.getPlaces();
-      if (result.success && Array.isArray(result.data)) {
-        setPlaces(result.data);
+      console.log('Fetching places...');
+      const places = await apiService.getPlaces();
+      console.log('Received places:', places);
+      
+      if (Array.isArray(places)) {
+        setPlaces(places);
       } else {
-        throw new Error("Dữ liệu địa điểm trả về không hợp lệ.");
+        console.error('Invalid places data:', places);
+        throw new Error("Dữ liệu địa điểm trả về không hợp lệ");
       }
     } catch (err) {
+      console.error('Error fetching places:', err);
       // Kiểm tra nếu lỗi liên quan đến xác thực
       if (err.message && err.message.includes('xác thực')) {
         setPlaceError(`Lỗi xác thực: ${err.message}. Vui lòng vào trang cấu hình API để đăng nhập lại.`);
@@ -1448,9 +1452,9 @@ const CheckInApp = () => {
                 <option value="">
                   {isPlacesLoading ? "Đang tải địa điểm..." : "-- Chọn địa điểm --"}
                 </option>
-                {places.map((place) => (
-                  <option key={place.id} value={place.id}>
-                    {place.name} (ID: {place.id})
+                {Array.isArray(places) && places.map((place) => (
+                  <option key={place.id || place.placeID} value={place.id || place.placeID}>
+                    {place.name || place.placeName || "Unnamed"} (ID: {place.id || place.placeID})
                   </option>
                 ))}
               </select>
