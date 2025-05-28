@@ -83,7 +83,7 @@ async function setDynamicConfig(config) {
     }
   }
   
-  // Reset access token để buộc refresh lại
+  // Reset access token để buộc refresh lạil
   cachedTokenData.accessToken = null;
   cachedTokenData.expiresAt = null;
   
