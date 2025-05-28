@@ -1347,18 +1347,18 @@ const CheckInApp = () => {
                 <thead>
                   <tr>
                     <th>STT</th>
-                    <th>Họ tên</th>
-                    <th>Thời gian</th>
-                    <th>Thiết bị</th>
+                    {Object.keys(resultsData[0]).map((key) => (
+                      <th key={key}>{key}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {resultsData.map((item, idx) => (
                     <tr key={item.id || item._id || idx}>
                       <td>{idx + 1}</td>
-                      <td>{item.name || item.fullName || item.username || ''}</td>
-                      <td>{item.time || item.timestamp || item.checkinTime || ''}</td>
-                      <td>{item.deviceName || item.device || ''}</td>
+                      {Object.keys(resultsData[0]).map((key) => (
+                        <td key={key}>{String(item[key] ?? '')}</td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
