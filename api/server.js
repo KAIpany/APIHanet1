@@ -202,6 +202,19 @@ const validateCheckinParams = (req, res, next) => {
     });
   }
 
+  // Validate time range: giới hạn tối đa 7 ngày (168 giờ)
+  const timeDiff = (toTimestamp - fromTimestamp) / (1000 * 60 * 60); // Hours
+  if (timeDiff > 168) {
+    return res.status(400).json({
+      success: false,
+      message: 'Query time range cannot exceed 7 days (168 hours)',
+      details: {
+        requestedHours: Math.round(timeDiff),
+        maxAllowedHours: 168
+      }
+    });
+  }
+
   // Lưu timestamp đã được validate vào request object
   req.validatedParams = {
     placeId,
