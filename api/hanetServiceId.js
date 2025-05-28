@@ -41,16 +41,18 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
       startTime += MAX_SEGMENT_SIZE;
     }
 
-    console.log(`Split into ${segments.length} segments`);
+    console.log(`Split into ${segments.length} segments (Hanet API calls)`);
 
     // Process each segment
     const allResults = new Map();
     const failedSegments = [];
+    let hanetApiCallCount = 0; // Đếm số lần gọi Hanet API
 
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
       try {
         console.log(`Processing segment ${i + 1}/${segments.length}`);
+        hanetApiCallCount++;
         
         const url = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
         const formData = new URLSearchParams({
@@ -127,6 +129,7 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
 
       try {
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        hanetApiCallCount++;
         
         const url = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
         const formData = new URLSearchParams({
@@ -191,6 +194,9 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
         }
       }
     }
+
+    // Sau khi hoàn thành, log tổng số lần gọi Hanet API
+    console.log(`[HANET API] Tổng số lần gọi Hanet API cho truy vấn này: ${hanetApiCallCount}`);
 
     // Process results
     const results = [];
