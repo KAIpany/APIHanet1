@@ -985,6 +985,108 @@ const CheckInApp = () => {
     return createAccountFromOAuthConfig();
   };
 
+  // Load user information from localStorage
+  const loadUserInfo = useCallback(() => {
+    const savedUserInfo = localStorage.getItem('user_info');
+    console.log('Loading user info from localStorage:', savedUserInfo);
+    
+    if (savedUserInfo) {
+      try {
+        const parsedUserInfo = JSON.parse(savedUserInfo);
+        setUserInfo(parsedUserInfo);
+      } catch (error) {
+        console.error('Error parsing user info:', error);
+      }
+    }
+  }, []);
+
+  // Handle form input changes
+  const handleChange = useCallback((event) => {
+    const { name, value } = event.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+    }));
+    
+    // Reset error states when input changes
+    setSubmitError(null);
+    setSuccessMessage(null);
+    setResultsData(null);
+  }, []);
+
+  // Create manual account function
+  const createManualAccount = useCallback(() => {
+    try {
+      // Close account menu
+      setShowAccountMenu(false);
+      
+      // Get account name from user
+      const accountName = prompt('Nhập tên tài khoản:');
+      if (!accountName) return;
+      
+      // Get app name from OAuth config if available
+      let appName = '';
+      try {
+        const currentOAuthConfigKey = localStorage.getItem('hanet_current_oauth_config_key') || 'hanet_oauth_config';
+        const oauthConfig = JSON.parse(localStorage.getItem(currentOAuthConfigKey) || '{}');
+        appName = oauthConfig.appName || '';
+      } catch (e) {
+        console.error('Error reading OAuth config:', e);
+      }
+      
+      // Create account ID
+      const accountId = appName 
+        ? `manual_user_${appName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`
+        : `manual_user_${Date.now()}`;
+      
+      // Create OAuth config key
+      const oauthConfigKey = appName 
+        ? `hanet_oauth_config_${appName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`
+        : 'hanet_oauth_config';
+      
+      // Create new account object
+      const newAccount = {
+        id: accountId,
+        name: accountName,
+        appName: appName,
+        oauthConfigKey: oauthConfigKey,
+        createdAt: new Date().toISOString()
+      };
+      
+      // Update accounts list
+      const updatedAccounts = [...accounts, newAccount];
+      setAccounts(updatedAccounts);
+      
+      // Save to localStorage
+      localStorage.setItem('hanet_accounts_direct', JSON.stringify(updatedAccounts));
+      localStorage.setItem('hanet_accounts_v2', JSON.stringify(updatedAccounts));
+      localStorage.setItem('hanet_accounts', JSON.stringify(updatedAccounts));
+      
+      // Ask user if they want to switch to new account
+      if (window.confirm(`Đã tạo tài khoản "${accountName}". Bạn có muốn chuyển sang tài khoản này không?`)) {
+        const simpleUserInfo = {
+          username: accountId,
+          name: accountName
+        };
+        
+        localStorage.setItem('user_info', JSON.stringify(simpleUserInfo));
+        localStorage.setItem('hanet_current_account_direct', accountId);
+        localStorage.setItem('hanet_current_account_id_v2', accountId);
+        localStorage.setItem('hanet_current_account_id', accountId);
+        localStorage.setItem('hanet_current_oauth_config_key', oauthConfigKey);
+        
+        setUserInfo(simpleUserInfo);
+        window.location.reload();
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error creating manual account:', error);
+      alert('Không thể tạo tài khoản: ' + error.message);
+      return false;
+    }
+  }, [accounts]);
+
   const renderAccountMenu = () => {
     if (!showAccountMenu) return null;
 
