@@ -163,37 +163,88 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
 
     // Process results
     const results = [];
+    // Gom tất cả bản ghi theo personID, sắp xếp theo thời gian
+    const allPersonRecords = new Map();
     for (const [_, group] of allResults) {
-      // Sort records by time
-      group.records.sort((a, b) => parseInt(a.time) - parseInt(b.time));
-      // Get first check-in and last check-out
-      const checkinRecord = group.records[0];
-      const checkoutRecord = group.records[group.records.length - 1];
-      // Calculate working time
-      let workingTime = "N/A";
-      if (checkinRecord && checkoutRecord) {
-        const checkinTime = parseInt(checkinRecord.time);
-        const checkoutTime = parseInt(checkoutRecord.time);
-        if (checkinTime === checkoutTime) {
-          workingTime = "0h 0m";
-        } else {
-          const durationMinutes = (checkoutTime - checkinTime) / (1000 * 60);
-          const hours = Math.floor(durationMinutes / 60);
-          const minutes = Math.floor(durationMinutes % 60);
-          workingTime = `${hours}h ${minutes}m`;
-        }
-      }
-      results.push({
-        ...group.personInfo,
-        checkinTime: checkinRecord ? checkinRecord.time : null,
-        checkoutTime: checkoutRecord ? checkoutRecord.time : null,
-        formattedCheckinTime: checkinRecord ? checkinRecord.formattedTime : null,
-        formattedCheckoutTime: checkoutRecord ? checkoutRecord.formattedTime : null,
-        workingTime: workingTime,
-        totalRecords: group.records.length
+      const pid = group.personInfo.personID;
+      if (!allPersonRecords.has(pid)) allPersonRecords.set(pid, []);
+      group.records.forEach(r => {
+        allPersonRecords.get(pid).push({
+          ...group.personInfo,
+          time: r.time,
+          formattedTime: r.formattedTime,
+          date: group.personInfo.date // ngày của bản ghi này
+        });
       });
     }
-    // Sort results by date and check-in time
+    // Sắp xếp tất cả bản ghi của mỗi personID theo thời gian tăng dần
+    for (const [pid, recs] of allPersonRecords) {
+      recs.sort((a, b) => parseInt(a.time) - parseInt(b.time));
+      let prevRecord = null;
+      let prevDate = null;
+      for (let i = 0; i < recs.length; i++) {
+        const curr = recs[i];
+        // Nếu là bản ghi đầu tiên của một ngày mới
+        if (i === 0 || curr.date !== prevDate) {
+          // Bản ghi đầu tiên của ngày là check-in cho ngày đó
+          // Nếu có bản ghi trước đó, thì bản ghi trước đó là checkout cho ngày trước đó
+          if (prevRecord && prevDate) {
+            // Tính workingTime cho ngày trước đó
+            let workingTime = "N/A";
+            const checkinTime = parseInt(recs[i - 1].time); // check-in ngày trước là bản ghi đầu tiên của ngày trước
+            const checkoutTime = parseInt(prevRecord.time); // checkout là bản ghi cuối cùng trước ngày mới
+            if (checkinTime === checkoutTime) {
+              workingTime = "0h 0m";
+            } else {
+              const durationMinutes = (checkoutTime - checkinTime) / (1000 * 60);
+              const hours = Math.floor(Math.abs(durationMinutes) / 60);
+              const minutes = Math.floor(Math.abs(durationMinutes) % 60);
+              workingTime = `${hours}h ${minutes}m`;
+            }
+            results.push({
+              ...recs[i - 1], // check-in ngày trước
+              checkinTime: recs[i - 1].time,
+              checkoutTime: prevRecord.time,
+              formattedCheckinTime: recs[i - 1].formattedTime,
+              formattedCheckoutTime: prevRecord.formattedTime,
+              workingTime: workingTime,
+              totalRecords: recs.filter(r => r.date === prevDate).length
+            });
+          }
+        }
+        prevRecord = curr;
+        prevDate = curr.date;
+      }
+      // Xử lý ngày cuối cùng (nếu chưa được push)
+      if (recs.length > 0) {
+        const lastDate = recs[recs.length - 1].date;
+        const lastCheckin = recs.find(r => r.date === lastDate);
+        const lastCheckout = recs[recs.length - 1];
+        if (lastCheckin && lastCheckout && !results.some(r => r.date === lastDate && r.personID === pid)) {
+          let workingTime = "N/A";
+          const checkinTime = parseInt(lastCheckin.time);
+          const checkoutTime = parseInt(lastCheckout.time);
+          if (checkinTime === checkoutTime) {
+            workingTime = "0h 0m";
+          } else {
+            const durationMinutes = (checkoutTime - checkinTime) / (1000 * 60);
+            const hours = Math.floor(Math.abs(durationMinutes) / 60);
+            const minutes = Math.floor(Math.abs(durationMinutes) % 60);
+            workingTime = `${hours}h ${minutes}m`;
+          }
+          results.push({
+            ...lastCheckin,
+            checkinTime: lastCheckin.time,
+            checkoutTime: lastCheckout.time,
+            formattedCheckinTime: lastCheckin.formattedTime,
+            formattedCheckoutTime: lastCheckout.formattedTime,
+            workingTime: workingTime,
+            totalRecords: recs.filter(r => r.date === lastDate).length
+          });
+        }
+      }
+    }
+    // Sort results by date và check-in time
     results.sort((a, b) => {
       if (a.date !== b.date) {
         return a.date.localeCompare(b.date);
