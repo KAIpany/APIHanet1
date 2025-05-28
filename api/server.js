@@ -88,9 +88,29 @@ app.get("/api/people", async (req, res, next) => {
 
 app.get("/api/place", async (req, res, next) => {
   try {
+    console.log(`[${req.id}] Fetching places...`);
     const placeData = await getAllPlace.getAllPlace();
-    res.status(200).json({ success: true, data: placeData });
+    
+    // Validate and format data
+    if (!Array.isArray(placeData)) {
+      console.error(`[${req.id}] Invalid place data format:`, placeData);
+      throw new Error('Invalid place data format received from Hanet API');
+    }
+
+    // Format places data
+    const formattedPlaces = placeData.map(place => ({
+      id: place.id || place.placeID,
+      name: place.name || place.placeName || 'Unnamed Place'
+    })).filter(place => place.id); // Filter out places without ID
+
+    console.log(`[${req.id}] Returning ${formattedPlaces.length} places`);
+
+    res.status(200).json({
+      success: true,
+      data: formattedPlaces
+    });
   } catch (error) {
+    console.error(`[${req.id}] Error fetching places:`, error);
     next(error);
   }
 });
