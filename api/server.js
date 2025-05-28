@@ -146,14 +146,24 @@ const validateCheckinParams = (req, res, next) => {
 
 app.get("/api/checkins", validateCheckinParams, async (req, res, next) => {
   try {
-    const { placeId, fromTimestamp, toTimestamp, devices } =
-      req.validatedParams;
+    const { placeId, fromTimestamp, toTimestamp, devices } = req.validatedParams;
 
-    console.log(
-      `[${new Date().toISOString()}] Nhận yêu cầu lấy checkin cho placeId: ${placeId}, từ: ${fromTimestamp}, đến: ${toTimestamp}, devices: ${
-        devices || "Tất cả"
-      }`
-    );
+    // Log chi tiết request để debug
+    console.log('Request params:', {
+      placeId,
+      fromTimestamp: new Date(parseInt(fromTimestamp)).toLocaleString(),
+      toTimestamp: new Date(parseInt(toTimestamp)).toLocaleString(),
+      devices
+    });
+
+    // Kiểm tra khoảng thời gian
+    const timeDiff = (toTimestamp - fromTimestamp) / (1000 * 60 * 60); // Giờ
+    if (timeDiff > 72) { // Giới hạn 72 giờ
+      return res.status(400).json({
+        success: false,
+        message: 'Khoảng thời gian truy vấn không được vượt quá 72 giờ'
+      });
+    }
 
     // Tính thời gian thực hiện
     const startTime = process.hrtime();
@@ -170,29 +180,50 @@ app.get("/api/checkins", validateCheckinParams, async (req, res, next) => {
       const endTime = process.hrtime(startTime);
       const timeInSeconds = endTime[0] + endTime[1] / 1e9;
       
-      console.log(
-        `[${new Date().toISOString()}] Trả về ${
-          Array.isArray(filteredCheckins) ? filteredCheckins.length : "kết quả"
-        } checkin, thực hiện trong ${timeInSeconds.toFixed(2)}s.`
-      );
+      // Log kết quả để debug
+      console.log('API Response:', {
+        recordCount: Array.isArray(filteredCheckins) ? filteredCheckins.length : 'invalid',
+        executionTime: timeInSeconds.toFixed(2) + 's'
+      });
+
+      if (!Array.isArray(filteredCheckins)) {
+        throw new Error('Invalid response format from Hanet service');
+      }
 
       res.status(200).json(filteredCheckins);
     } catch (error) {
-      // Kiểm tra lỗi timeout
-      if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
-        console.error(`[${new Date().toISOString()}] Lỗi timeout khi truy vấn dữ liệu:`, error.message);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        code: error.code
+      });
+
+      // Xử lý các loại lỗi cụ thể
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
         return res.status(504).json({
           success: false,
-          message: "Yêu cầu mất quá nhiều thời gian để xử lý. Vui lòng thử với khoảng thời gian nhỏ hơn hoặc thử lại sau.",
-          error: "TIMEOUT_ERROR",
-          details: error.message
+          message: 'Request timeout. Vui lòng thử lại với khoảng thời gian ngắn hơn.',
+          error: 'TIMEOUT_ERROR'
         });
       }
-      
-      throw error;
+
+      if (error.message.includes('authentication') || error.message.includes('token')) {
+        return res.status(401).json({
+          success: false,
+          message: 'Lỗi xác thực với Hanet API',
+          error: 'AUTH_ERROR'
+        });
+      }
+
+      // Các lỗi khác
+      res.status(500).json({
+        success: false,
+        message: 'Lỗi khi xử lý yêu cầu: ' + error.message,
+        error: 'INTERNAL_ERROR'
+      });
     }
   } catch (err) {
-    console.error(`[${new Date().toISOString()}] Lỗi khi xử lý yêu cầu checkins:`, err.message);
+    console.error('Unhandled error:', err);
     next(err);
   }
 });
