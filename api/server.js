@@ -410,6 +410,46 @@ const handleApiError = (err, req, res, next) => {
 
 app.use(handleApiError);
 
+// Global error handling middleware
+app.use((err, req, res, next) => {
+  console.error('[Error Handler]', {
+    message: err.message,
+    stack: err.stack,
+    url: req.originalUrl,
+    method: req.method,
+    body: req.body,
+    query: req.query
+  });
+
+  // Nếu lỗi là do timeout
+  if (err.message && (
+    err.message.includes('timeout') || 
+    err.message.includes('FUNCTION_INVOCATION_TIMEOUT') ||
+    err.message.includes('Gateway Timeout')
+  )) {
+    return res.status(504).json({
+      error: 'Gateway Timeout',
+      message: 'Yêu cầu mất quá nhiều thời gian để xử lý'
+    });
+  }
+
+  // Lỗi xác thực từ Hanet API
+  if (err.message && err.message.includes('authentication failed')) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Lỗi xác thực với Hanet API'
+    });
+  }
+
+  // Lỗi mặc định
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'production' 
+      ? 'Đã xảy ra lỗi hệ thống' 
+      : err.message
+  });
+});
+
 if (process.env.PORT !== "production") {
   app.listen(PORT, () => {
     console.log(`Server đang lắng nghe trên cổng ${PORT}`);
