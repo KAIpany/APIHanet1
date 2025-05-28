@@ -129,22 +129,34 @@ const fetchWithAuth = async (url, options = {}) => {
     throw new Error(data.message || 'Request was not successful');
   }
 
-  // Nếu response có cấu trúc metadata và data, trả về data
-  if (data.metadata && Array.isArray(data.data)) {
-    console.log('API response metadata:', data.metadata);
-    return data.data;
+  // Log response data for debugging
+  console.log('API Response:', data);
+
+  // Case 1: Response has success and data structure (most common case)
+  if (data.success && data.data) {
+    console.log('Found success and data structure');
+    return Array.isArray(data.data) ? data.data : [data.data];
   }
 
-  // Nếu response là mảng trực tiếp, trả về nó
+  // Case 2: Response has metadata and data structure
+  if (data.metadata && data.data) {
+    console.log('Found metadata and data structure');
+    return Array.isArray(data.data) ? data.data : [data.data];
+  }
+
+  // Case 3: Response is an array directly
   if (Array.isArray(data)) {
+    console.log('Found direct array response');
     return data;
   }
 
-  // Nếu response có data là mảng, trả về data
-  if (data.data && Array.isArray(data.data)) {
-    return data.data;
+  // Case 4: Response has only data field
+  if (data.data) {
+    console.log('Found data field only');
+    return Array.isArray(data.data) ? data.data : [data.data];
   }
 
+  // No valid data found
   console.warn('Unexpected API response format:', data);
   return [];
 };
@@ -167,7 +179,48 @@ const apiService = {
   
   // Lấy danh sách địa điểm
   async getPlaces() {
-    return await fetchWithAuth(`${API_URL}/api/place`);
+    try {
+      console.log('Fetching places from API...');
+      const response = await fetch(`${API_URL}/api/place`);
+      const data = await response.json();
+      
+      console.log('Places API Response:', data);
+      
+      // Kiểm tra response format
+      if (!data) {
+        console.error('Empty response from places API');
+        throw new Error('Không nhận được dữ liệu từ API');
+      }
+      
+      // Kiểm tra nếu có lỗi
+      if (data.success === false) {
+        console.error('API returned error:', data.message);
+        throw new Error(data.message || 'Lỗi khi lấy danh sách địa điểm');
+      }
+      
+      // Kiểm tra và xử lý dữ liệu
+      if (data.success && Array.isArray(data.data)) {
+        console.log(`Found ${data.data.length} places`);
+        return data.data;
+      }
+      
+      if (data.success && data.data) {
+        console.log('Converting places data to array');
+        return Array.isArray(data.data) ? data.data : [data.data];
+      }
+      
+      // Nếu response là array trực tiếp
+      if (Array.isArray(data)) {
+        console.log(`Found ${data.length} places (direct array)`);
+        return data;
+      }
+      
+      console.error('Invalid places data format:', data);
+      throw new Error('Dữ liệu địa điểm trả về không hợp lệ');
+    } catch (error) {
+      console.error('Error fetching places:', error);
+      throw new Error('Lỗi khi lấy danh sách địa điểm: ' + error.message);
+    }
   },
   
   // Lấy danh sách thiết bị theo địa điểm
