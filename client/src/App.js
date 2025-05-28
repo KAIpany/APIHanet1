@@ -1337,6 +1337,38 @@ const CheckInApp = () => {
           >
             {isSubmitting ? "Đang tìm kiếm..." : "Tìm kiếm Check-in"}
           </button>
+
+          {/* Hiển thị kết quả check-in */}
+          {resultsData && Array.isArray(resultsData) && resultsData.length > 0 && (
+            <div className="results-section">
+              <h3>Kết quả check-in:</h3>
+              <table className="results-table">
+                <thead>
+                  <tr>
+                    <th>STT</th>
+                    <th>Họ tên</th>
+                    <th>Thời gian</th>
+                    <th>Thiết bị</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resultsData.map((item, idx) => (
+                    <tr key={item.id || item._id || idx}>
+                      <td>{idx + 1}</td>
+                      <td>{item.name || item.fullName || item.username || ''}</td>
+                      <td>{item.time || item.timestamp || item.checkinTime || ''}</td>
+                      <td>{item.deviceName || item.device || ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {/* Nếu muốn xem JSON thô */}
+              <details>
+                <summary>Xem dữ liệu thô (JSON)</summary>
+                <pre style={{maxHeight: 300, overflow: 'auto', background: '#f7f7f7', padding: 8}}>{JSON.stringify(resultsData, null, 2)}</pre>
+              </details>
+            </div>
+          )}
         </form>
       )}
     </main>
