@@ -353,7 +353,11 @@ const apiService = {
   },
   
   async getCheckins(placeId, dateFrom, dateTo, deviceId = null) {
-    const SEGMENT_SIZE = 12 * 60 * 60 * 1000; // 12 giờ mỗi phân đoạn
+    const SEGMENT_SIZE = 6 * 60 * 60 * 1000; // Giảm xuống 6 giờ mỗi phân đoạn
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 5000;
+    const SEGMENT_DELAY = 2000;
+    
     const segments = [];
     let start = parseInt(dateFrom);
     const end = parseInt(dateTo);
@@ -381,7 +385,21 @@ const apiService = {
       try {
         console.log(`Đang xử lý phân đoạn ${segment.index}/${segmentCount}: ${new Date(segment.start).toLocaleString()} - ${new Date(segment.end).toLocaleString()}`);
         
-        const segmentResult = await fetchWithRetry(url);
+        let retryCount = 0;
+        let lastError = null;
+        
+        while (retryCount < MAX_RETRIES) {
+          try {
+            if (retryCount > 0) {
+              console.log(`Thử lại lần ${retryCount + 1} cho phân đoạn ${segment.index} sau ${RETRY_DELAY}ms`);
+              await sleep(RETRY_DELAY);
+            }
+            
+            const segmentResult = await fetchWithAuth(url);
+            
+            if (!Array.isArray(segmentResult)) {
+              throw new Error('Kết quả không hợp lệ');
+            }
         
         if (Array.isArray(segmentResult)) {
           console.log(`Nhận được ${segmentResult.length} bản ghi từ phân đoạn ${segment.index}`);
@@ -399,13 +417,48 @@ const apiService = {
           console.warn(`Phân đoạn ${segment.index} trả về dữ liệu không hợp lệ:`, segmentResult);
           failedSegments.push(segment);
         }
+            console.log(`Phân đoạn ${segment.index} thành công, nhận được ${segmentResult.length} bản ghi`);
+            
+            // Xử lý và loại bỏ trùng lặp
+            for (const record of segmentResult) {
+              if (!record.personID && !record.checkinTime) continue;
+              
+              const key = `${record.personID}_${record.checkinTime}`;
+              if (!uniqueRecords.has(key)) {
+                uniqueRecords.set(key, record);
+              }
+            }
+            
+            // Thành công, thoát khỏi vòng lặp retry
+            break;
+          } catch (error) {
+            lastError = error;
+            console.warn(`Lỗi lần ${retryCount + 1} khi xử lý phân đoạn ${segment.index}:`, error.message);
+            
+            // Nếu là lỗi xác thực hoặc lỗi dữ liệu không hợp lệ, không cần thử lại
+            if (error.message.includes('authentication') || 
+                error.message.includes('401') || 
+                error.message.includes('403')) {
+              throw error;
+            }
+            
+            retryCount++;
+            
+            // Nếu đã hết số lần thử
+            if (retryCount >= MAX_RETRIES) {
+              console.error(`Không thể xử lý phân đoạn ${segment.index} sau ${MAX_RETRIES} lần thử`);
+              failedSegments.push(segment);
+              break;
+            }
+          }
+        }
       } catch (error) {
-        console.error(`Lỗi khi xử lý phân đoạn ${segment.index}:`, error);
+        console.error(`Lỗi không thể khôi phục cho phân đoạn ${segment.index}:`, error);
         failedSegments.push(segment);
       }
       
-      // Thêm độ trễ nhỏ giữa các request để tránh quá tải
-      await sleep(1000);
+      // Thêm độ trễ giữa các phân đoạn
+      await sleep(SEGMENT_DELAY);
     }
 
     // Thử lại các phân đoạn thất bại với thời gian chờ dài hơn
