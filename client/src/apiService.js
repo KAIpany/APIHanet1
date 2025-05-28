@@ -160,6 +160,16 @@ const fetchWithAuth = async (url, options = {}) => {
   }
 };
 
+// Hàm sleep helper
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Hàm tính thời gian chờ theo exponential backoff
+const calculateBackoff = (attempt, baseDelay = 2000, maxDelay = 30000) => {
+  const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
+  // Thêm jitter để tránh thundering herd
+  return delay + Math.random() * 1000;
+};
+
 // API functions
 const apiService = {
   // Kiểm tra trạng thái xác thực
@@ -195,33 +205,55 @@ const apiService = {
     const MAX_HOURS = 24; // Giới hạn mỗi lần truy vấn
     
     // Hàm thử lại truy vấn khi gặp lỗi
-    const fetchWithRetry = async (url, maxRetries = 2) => {
-      let lastError;
+    const fetchWithRetry = async (url, maxRetries = 3) => {
+      let lastError = null;
       
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
           if (attempt > 0) {
-            console.log(`Thử lại lần ${attempt} cho URL: ${url}`);
-            // Chờ 1 giây trước khi thử lại
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            const delay = calculateBackoff(attempt);
+            console.log(`Thử lại lần ${attempt + 1}/${maxRetries} sau ${delay}ms cho URL: ${url}`);
+            await sleep(delay);
           }
           
           const result = await fetchWithAuth(url);
+          
+          // Kiểm tra kết quả
+          if (!result || (Array.isArray(result) && result.length === 0)) {
+            console.warn('Nhận được kết quả rỗng từ API');
+          }
+          
           return result;
         } catch (error) {
           lastError = error;
           console.warn(`Lỗi lần thử ${attempt + 1}/${maxRetries}:`, error.message);
           
-          // Nếu lỗi timeout, không cần thử lại nữa
-          if (error.message && (error.message.includes('timeout') || 
-              error.message.includes('FUNCTION_INVOCATION_TIMEOUT') ||
-              error.message.includes('Gateway Timeout'))) {
-            break;
+          // Kiểm tra các loại lỗi khác nhau
+          if (error.message) {
+            // Lỗi xác thực - không cần thử lại
+            if (error.message.includes('401') || error.message.includes('403')) {
+              throw error;
+            }
+            
+            // Lỗi timeout hoặc gateway - có thể thử lại
+            if (error.message.includes('timeout') || 
+                error.message.includes('504') ||
+                error.message.includes('Gateway')) {
+              // Tiếp tục vòng lặp để thử lại
+              continue;
+            }
+            
+            // Lỗi server (500) - thử lại với thời gian chờ dài hơn
+            if (error.message.includes('500')) {
+              await sleep(calculateBackoff(attempt, 5000)); // Tăng thời gian chờ base lên 5s
+              continue;
+            }
           }
         }
       }
       
-      throw lastError;
+      // Nếu đã thử hết số lần mà vẫn lỗi
+      throw lastError || new Error('Không thể kết nối đến máy chủ sau nhiều lần thử');
     };
     
     // Nếu khoảng thời gian nhỏ hơn 24 giờ, thực hiện truy vấn bình thường
@@ -267,7 +299,7 @@ const apiService = {
     let errors = [];
     let processedCount = 0;
     
-    // Khử dụng cho trường hợp trùng dữ liệu
+    // Khử sử dụng cho trường hợp trùng dữ liệu
     const uniqueRecords = new Map();
     
     // Xử lý từng đoạn thời gian
@@ -318,6 +350,94 @@ const apiService = {
     
     console.log(`Hoàn tất! Đã lấy tổng cộng ${allResults.length} bản ghi duy nhất.`);
     return allResults;
+  },
+  
+  async getCheckins(placeId, dateFrom, dateTo, deviceId = null) {
+    const SEGMENT_SIZE = 12 * 60 * 60 * 1000; // 12 giờ mỗi phân đoạn
+    const segments = [];
+    let start = parseInt(dateFrom);
+    const end = parseInt(dateTo);
+
+    // Chia thành các phân đoạn nhỏ hơn
+    while (start < end) {
+      segments.push({
+        start: start,
+        end: Math.min(start + SEGMENT_SIZE, end),
+        index: segments.length + 1
+      });
+      start += SEGMENT_SIZE;
+    }
+
+    const segmentCount = segments.length;
+    console.log(`Chia thành ${segmentCount} phân đoạn để xử lý`);
+
+    const uniqueRecords = new Map();
+    let failedSegments = [];
+
+    // Xử lý từng phân đoạn
+    for (const segment of segments) {
+      const url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${segment.start}&dateTo=${segment.end}${deviceId ? `&devices=${deviceId}` : ''}`;
+      
+      try {
+        console.log(`Đang xử lý phân đoạn ${segment.index}/${segmentCount}: ${new Date(segment.start).toLocaleString()} - ${new Date(segment.end).toLocaleString()}`);
+        
+        const segmentResult = await fetchWithRetry(url);
+        
+        if (Array.isArray(segmentResult)) {
+          console.log(`Nhận được ${segmentResult.length} bản ghi từ phân đoạn ${segment.index}`);
+          
+          // Xử lý và loại bỏ trùng lặp
+          for (const record of segmentResult) {
+            if (!record.person_id || !record.checkin_time) continue;
+            
+            const key = `${record.person_id}_${record.checkin_time}`;
+            if (!uniqueRecords.has(key)) {
+              uniqueRecords.set(key, record);
+            }
+          }
+        } else {
+          console.warn(`Phân đoạn ${segment.index} trả về dữ liệu không hợp lệ:`, segmentResult);
+          failedSegments.push(segment);
+        }
+      } catch (error) {
+        console.error(`Lỗi khi xử lý phân đoạn ${segment.index}:`, error);
+        failedSegments.push(segment);
+      }
+      
+      // Thêm độ trễ nhỏ giữa các request để tránh quá tải
+      await sleep(1000);
+    }
+
+    // Thử lại các phân đoạn thất bại với thời gian chờ dài hơn
+    if (failedSegments.length > 0) {
+      console.log(`Thử lại ${failedSegments.length} phân đoạn thất bại...`);
+      
+      for (const segment of failedSegments) {
+        const url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${segment.start}&dateTo=${segment.end}${deviceId ? `&devices=${deviceId}` : ''}`;
+        
+        try {
+          await sleep(5000); // Chờ lâu hơn trước khi thử lại
+          const retryResult = await fetchWithRetry(url, 5); // Tăng số lần thử lại
+          
+          if (Array.isArray(retryResult)) {
+            for (const record of retryResult) {
+              if (!record.person_id || !record.checkin_time) continue;
+              
+              const key = `${record.person_id}_${record.checkin_time}`;
+              if (!uniqueRecords.has(key)) {
+                uniqueRecords.set(key, record);
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Không thể khôi phục phân đoạn ${segment.index} sau khi thử lại:`, error);
+        }
+      }
+    }
+
+    const results = Array.from(uniqueRecords.values());
+    console.log(`Tổng số bản ghi duy nhất: ${results.length}`);
+    return results;
   }
 };
 
