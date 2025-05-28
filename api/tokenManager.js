@@ -9,8 +9,7 @@ let cachedTokenData = {
   accessToken: null,
   refreshToken: null,
   expiresAt: null,
-  lastSync: Date.now(), // Timestamp cho lần đồng bộ cuối
-  retryCount: 0 // Đếm số lần thử lại để reset khi cần
+  lastSync: Date.now() // Timestamp cho lần đồng bộ cuối
 };
 
 // Khởi tạo và tải token từ storage
@@ -20,44 +19,33 @@ const initializeTokens = async () => {
     const storedTokens = await tokenStorage.loadTokens();
     
     if (storedTokens && storedTokens.refreshToken) {
-      console.log(`[${new Date().toISOString()}] Tải refresh token từ storage thành công: ${storedTokens.refreshToken.substring(0, 10)}...`);
+      console.log(`[${new Date().toISOString()}] Tải refresh token từ storage thành công`);
       cachedTokenData.refreshToken = storedTokens.refreshToken;
       cachedTokenData.accessToken = storedTokens.accessToken || null;
       cachedTokenData.expiresAt = storedTokens.expiresAt || null;
       cachedTokenData.lastSync = Date.now();
-      cachedTokenData.retryCount = 0;
     } else if (process.env.HANET_REFRESH_TOKEN) {
       // Nếu không có trong storage, dùng từ biến môi trường
-      console.log(`[${new Date().toISOString()}] Tải refresh token từ biến môi trường: ${process.env.HANET_REFRESH_TOKEN.substring(0, 10)}...`);
+      console.log(`[${new Date().toISOString()}] Tải refresh token từ biến môi trường`);
       cachedTokenData.refreshToken = process.env.HANET_REFRESH_TOKEN;
       cachedTokenData.lastSync = Date.now();
-      cachedTokenData.retryCount = 0;
       // Lưu ngay vào storage
       await tokenStorage.saveTokens(cachedTokenData);
     } else {
-      console.warn(`[${new Date().toISOString()}] CẢNH BÁO: Không tìm thấy refresh token đã lưu trữ trong bất kỳ nguồn nào`);
+      console.log(`[${new Date().toISOString()}] Không tìm thấy refresh token đã lưu trữ`);
     }
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Lỗi khi khởi tạo token:`, error.message);
     // Vẫn dùng token từ biến môi trường nếu có
     if (process.env.HANET_REFRESH_TOKEN) {
-      console.log(`[${new Date().toISOString()}] Sử dụng refresh token từ biến môi trường sau lỗi: ${process.env.HANET_REFRESH_TOKEN.substring(0, 10)}...`);
       cachedTokenData.refreshToken = process.env.HANET_REFRESH_TOKEN;
       cachedTokenData.lastSync = Date.now();
-      cachedTokenData.retryCount = 0;
     }
   }
 };
 
-// Khởi tạo khi module được load và đảm bảo hoàn thành trước khi sử dụng
-(async () => {
-  try {
-    await initializeTokens();
-    console.log(`[${new Date().toISOString()}] Khởi tạo token manager hoàn tất, refresh token: ${cachedTokenData.refreshToken ? 'có sẵn' : 'không có'}`);
-  } catch (err) {
-    console.error(`[${new Date().toISOString()}] Lỗi khi khởi tạo token manager:`, err);
-  }
-})();
+// Khởi tạo khi module được load
+initializeTokens();
 
 // Lưu trữ cấu hình động từ client
 let dynamicConfig = null;
@@ -128,21 +116,19 @@ async function getValidHanetToken() {
       if (storedTokens && storedTokens.refreshToken) {
         cachedTokenData.refreshToken = storedTokens.refreshToken;
         cachedTokenData.lastSync = now;
-        console.log(`[${new Date().toISOString()}] Đã đồng bộ lại refresh token từ storage: ${storedTokens.refreshToken.substring(0, 10)}...`);
+        console.log(`[${new Date().toISOString()}] Đã đồng bộ lại refresh token từ storage`);
       }
       // Nếu có dynamic config, cập nhật lại refresh token từ đó
       else if (dynamicConfig && dynamicConfig.refreshToken) {
         cachedTokenData.refreshToken = dynamicConfig.refreshToken;
         cachedTokenData.lastSync = now;
-        console.log(`[${new Date().toISOString()}] Đã đồng bộ lại refresh token từ dynamic config: ${dynamicConfig.refreshToken.substring(0, 10)}...`);
+        console.log(`[${new Date().toISOString()}] Đã đồng bộ lại refresh token từ dynamic config`);
       } 
       // Nếu không có dynamic config, thử lấy từ env
       else if (process.env.HANET_REFRESH_TOKEN) {
         cachedTokenData.refreshToken = process.env.HANET_REFRESH_TOKEN;
         cachedTokenData.lastSync = now;
-        console.log(`[${new Date().toISOString()}] Đã đồng bộ lại refresh token từ env: ${process.env.HANET_REFRESH_TOKEN.substring(0, 10)}...`);
-      } else {
-        console.warn(`[${new Date().toISOString()}] Không tìm thấy refresh token trong bất kỳ nguồn lưu trữ nào`);
+        console.log(`[${new Date().toISOString()}] Đã đồng bộ lại refresh token từ env`);
       }
     } catch (error) {
       console.error(`[${new Date().toISOString()}] Lỗi khi đồng bộ token:`, error.message);
@@ -158,11 +144,8 @@ async function getValidHanetToken() {
     const config = getCurrentConfig();
     const refreshToken = cachedTokenData.refreshToken || config.refreshToken;
     
-    // Log trạng thái hiện tại của token để debug
-    console.log(`[${new Date().toISOString()}] Trạng thái refresh token: cachedToken=${!!cachedTokenData.refreshToken}, configToken=${!!config.refreshToken}, envToken=${!!process.env.HANET_REFRESH_TOKEN}`);
-    
     if (!refreshToken) {
-      throw new Error("Không có refresh token để làm mới access token dù cầu hình vẫn còn");
+      throw new Error("Không có refresh token để làm mới access token");
     }
 
     if (!config.clientId || !config.clientSecret) {
@@ -178,7 +161,7 @@ async function getValidHanetToken() {
       client_secret: config.clientSecret,
     };
 
-    console.log(`[${new Date().toISOString()}] Đang làm mới Access Token với refresh token: ${refreshToken.substring(0, 10)}...`);
+    console.log(`[${new Date().toISOString()}] Đang làm mới Access Token...`);
     
     const response = await axios({
       method: "post",
