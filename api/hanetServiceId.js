@@ -1,65 +1,208 @@
-function filterCheckinsByDay(data) {
+require("dotenv").config();
+const fetch = require('node-fetch');
+const tokenManager = require("./tokenManager");
+
+const MAX_SEGMENT_SIZE = 6 * 60 * 60 * 1000; // 6 hours per segment
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 5000;
+const HANET_API_BASE_URL = process.env.HANET_API_BASE_URL;
+
+// Validate base URL
+if (!HANET_API_BASE_URL) {
+  console.error("Error: HANET_API_BASE_URL environment variable is not set");
+  throw new Error("Missing HANET_API_BASE_URL configuration");
+}
+
+async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
   try {
-    // Kiểm tra dữ liệu đầu vào
-    if (!Array.isArray(data)) {
-      console.error("Dữ liệu đầu vào của filter không phải là mảng.");
-      return [];
+    console.log('getPeopleListByMethod called with:', {
+      placeId,
+      dateFrom: new Date(parseInt(dateFrom)).toLocaleString(),
+      dateTo: new Date(parseInt(dateTo)).toLocaleString(),
+      devices
+    });
+
+    // Get access token
+    const accessToken = await tokenManager.getValidHanetToken();
+    if (!accessToken) {
+      throw new Error('Could not get valid access token');
     }
-    
-    console.log(`Đang xử lý ${data.length} bản ghi từ API Hanet...`);
 
-    // Lọc ra các bản ghi hợp lệ - chỉ cần personID
-    const validCheckins = data.filter(check => check && check.personID);
-    
-    console.log(`Sau khi lọc ban đầu, còn lại ${validCheckins.length} bản ghi hợp lệ.`);
+    // Split into smaller segments
+    const segments = [];
+    let startTime = parseInt(dateFrom);
+    const endTime = parseInt(dateTo);
 
-    // Thêm ngày cho mỗi bản ghi nếu chưa có
-    validCheckins.forEach(check => {
-      if (!check.date && check.checkinTime) {
-        const checkDate = new Date(parseInt(check.checkinTime, 10));
-        // Format: YYYY-MM-DD
-        check.date = `${checkDate.getFullYear()}-${(checkDate.getMonth() + 1).toString().padStart(2, "0")}-${checkDate.getDate().toString().padStart(2, "0")}`;
-      } else if (!check.date) {
-        const now = new Date();
-        check.date = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")}`;
-      }
-    });
-
-    // Nhóm bản ghi theo personID và date
-    const recordsByPersonDay = {};
-    
-    validCheckins.forEach(check => {
-      const key = `${check.date}_${check.personID}`;
-      if (!recordsByPersonDay[key]) {
-        recordsByPersonDay[key] = {
-          records: [],
-          personInfo: {
-            personName: check.personName || "",
-            personID: check.personID,
-            aliasID: check.aliasID || "",
-            placeID: check.placeID || null,
-            title: check.title ? (typeof check.title === "string" ? check.title.trim() : "N/A") : "Khách hàng",
-            date: check.date,
-          }
-        };
-      }
-      recordsByPersonDay[key].records.push({
-        time: check.checkinTime,
-        formattedTime: formatTimestamp(check.checkinTime)
+    while (startTime < endTime) {
+      segments.push({
+        start: startTime,
+        end: Math.min(startTime + MAX_SEGMENT_SIZE, endTime)
       });
-    });
+      startTime += MAX_SEGMENT_SIZE;
+    }
 
-    // Xử lý mỗi nhóm để lấy check-in đầu tiên và check-out cuối cùng
+    console.log(`Split into ${segments.length} segments`);
+
+    // Process each segment
+    const allResults = new Map();
+    const failedSegments = [];
+
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      try {
+        console.log(`Processing segment ${i + 1}/${segments.length}`);
+        
+        const url = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
+        const formData = new URLSearchParams({
+          token: accessToken,
+          placeID: placeId,
+          from: segment.start.toString(),
+          to: segment.end.toString(),
+          size: 200
+        });
+
+        if (devices) {
+          formData.append('devices', devices);
+        }
+
+        console.log(`Calling API: ${url} with placeId=${placeId}`);
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: formData.toString(),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (result.returnCode !== 1 && result.returnCode !== 0) {
+          throw new Error(result.returnMessage || 'Unknown API error');
+        }
+
+        const data = result.data || [];
+        
+        // Filter and process records
+        data.forEach(record => {
+          if (record && record.personID) {
+            const key = `${record.date || new Date(parseInt(record.checkinTime)).toISOString().split('T')[0]}_${record.personID}`;
+            if (!allResults.has(key)) {
+              allResults.set(key, {
+                records: [],
+                personInfo: {
+                  personName: record.personName || "",
+                  personID: record.personID,
+                  aliasID: record.aliasID || "",
+                  placeID: record.placeID || null,
+                  title: record.title ? (typeof record.title === "string" ? record.title.trim() : "N/A") : "Customer",
+                  date: record.date || new Date(parseInt(record.checkinTime)).toISOString().split('T')[0],
+                }
+              });
+            }
+            allResults.get(key).records.push({
+              time: record.checkinTime,
+              formattedTime: formatTimestamp(record.checkinTime)
+            });
+          }
+        });
+
+        // Wait between requests
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error(`Error processing segment ${i + 1}:`, error);
+        failedSegments.push({ ...segment, retryCount: 0 });
+      }
+    }
+
+    // Retry failed segments
+    while (failedSegments.length > 0) {
+      const segment = failedSegments.shift();
+      if (segment.retryCount >= MAX_RETRIES) {
+        console.error(`Failed to process segment after ${MAX_RETRIES} retries`);
+        continue;
+      }
+
+      try {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        
+        const url = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
+        const formData = new URLSearchParams({
+          token: accessToken,
+          placeID: placeId,
+          from: segment.start.toString(),
+          to: segment.end.toString(),
+          size: 200
+        });
+
+        if (devices) {
+          formData.append('devices', devices);
+        }
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: formData.toString(),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (result.returnCode !== 1 && result.returnCode !== 0) {
+          throw new Error(result.returnMessage || 'Unknown API error');
+        }
+
+        const data = result.data || [];
+        
+        // Process retry data
+        data.forEach(record => {
+          if (record && record.personID) {
+            const key = `${record.date || new Date(parseInt(record.checkinTime)).toISOString().split('T')[0]}_${record.personID}`;
+            if (!allResults.has(key)) {
+              allResults.set(key, {
+                records: [],
+                personInfo: {
+                  personName: record.personName || "",
+                  personID: record.personID,
+                  aliasID: record.aliasID || "",
+                  placeID: record.placeID || null,
+                  title: record.title ? (typeof record.title === "string" ? record.title.trim() : "N/A") : "Customer",
+                  date: record.date || new Date(parseInt(record.checkinTime)).toISOString().split('T')[0],
+                }
+              });
+            }
+            allResults.get(key).records.push({
+              time: record.checkinTime,
+              formattedTime: formatTimestamp(record.checkinTime)
+            });
+          }
+        });
+      } catch (error) {
+        console.error(`Retry ${segment.retryCount + 1} failed:`, error);
+        segment.retryCount++;
+        if (segment.retryCount < MAX_RETRIES) {
+          failedSegments.push(segment);
+        }
+      }
+    }
+
+    // Process results
     const results = [];
-    Object.values(recordsByPersonDay).forEach(group => {
-      // Sắp xếp các bản ghi theo thời gian
+    for (const [_, group] of allResults) {
+      // Sort records by time
       group.records.sort((a, b) => parseInt(a.time) - parseInt(b.time));
       
-      // Lấy bản ghi đầu tiên làm check-in và bản ghi cuối cùng làm check-out
+      // Get first check-in and last check-out
       const checkinRecord = group.records[0];
       const checkoutRecord = group.records[group.records.length - 1];
       
-      // Tính thời gian làm việc
+      // Calculate working time
       let workingTime = "N/A";
       if (checkinRecord && checkoutRecord) {
         const checkinTime = parseInt(checkinRecord.time);
@@ -82,11 +225,11 @@ function filterCheckinsByDay(data) {
         formattedCheckinTime: checkinRecord ? checkinRecord.formattedTime : null,
         formattedCheckoutTime: checkoutRecord ? checkoutRecord.formattedTime : null,
         workingTime: workingTime,
-        totalRecords: group.records.length // Thêm số lượng bản ghi trong ngày
+        totalRecords: group.records.length
       });
-    });
+    }
 
-    // Sắp xếp kết quả theo ngày và thời gian check-in
+    // Sort results by date and check-in time
     results.sort((a, b) => {
       if (a.date !== b.date) {
         return a.date.localeCompare(b.date);
@@ -94,25 +237,25 @@ function filterCheckinsByDay(data) {
       return parseInt(a.checkinTime) - parseInt(b.checkinTime);
     });
 
-    console.log(`Kết quả cuối cùng: ${results.length} bản ghi đã được xử lý.`);
+    console.log(`Final results: ${results.length} records processed.`);
     return results;
   } catch (error) {
-    console.error("Lỗi khi xử lý dữ liệu:", error);
-    return [];
+    console.error("Error processing data:", error);
+    throw error; // Re-throw to handle in the calling code
   }
 }
 
 function formatTimestamp(timestamp) {
-  // Đảm bảo timestamp là số
+  // Ensure timestamp is a number
   const ts = parseInt(timestamp, 10);
   
-  // Tạo đối tượng Date với timestamp
+  // Create Date object with timestamp
   const date = new Date(ts);
   
-  // Chuyển đổi sang múi giờ Việt Nam (UTC+7)
+  // Convert to Vietnam time (UTC+7)
   const vietnamTime = new Date(date.getTime() + 7 * 60 * 60 * 1000);
   
-  // Format các thành phần thời gian
+  // Format time components
   const hours = vietnamTime.getUTCHours().toString().padStart(2, "0");
   const minutes = vietnamTime.getUTCMinutes().toString().padStart(2, "0");
   const seconds = vietnamTime.getUTCSeconds().toString().padStart(2, "0");
@@ -120,356 +263,10 @@ function formatTimestamp(timestamp) {
   const month = (vietnamTime.getUTCMonth() + 1).toString().padStart(2, "0");
   const year = vietnamTime.getUTCFullYear();
   
-  // Trả về định dạng: HH:MM:SS DD/MM/YYYY
+  // Return format: HH:MM:SS DD/MM/YYYY
   return `${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
 }
 
-require("dotenv").config();
-const axios = require("axios");
-const qs = require("qs");
-const tokenManager = require("./tokenManager");
-const HANET_API_BASE_URL = process.env.HANET_API_BASE_URL;
-
-if (!HANET_API_BASE_URL) {
-  console.error("Lỗi: Biến môi trường HANET_API_BASE_URL chưa được thiết lập.");
-}
-
-// Constants
-const MAX_TIME_RANGE = 6 * 60 * 60 * 1000; // 6 giờ mỗi phân đoạn
-const MAX_RETRIES = 3;
-const BASE_TIMEOUT = 30000; // 30 seconds
-const RETRY_DELAY = 5000; // 5 seconds
-
-// Helper functions
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-const calculateBackoff = (attempt) => {
-  return Math.min(BASE_TIMEOUT * Math.pow(2, attempt), 120000); // Max 2 minutes
+module.exports = {
+  getPeopleListByMethod
 };
-
-// Hàm kiểm tra và làm mới token
-async function ensureValidToken() {
-  try {
-    const token = await tokenManager.getValidHanetToken();
-    if (!token) {
-      throw new Error('Không có access token');
-    }
-    return token;
-  } catch (error) {
-    console.error('Lỗi khi lấy access token:', error);
-    throw new Error('Lỗi xác thực với Hanet API');
-  }
-}
-
-// Hàm xử lý response từ Hanet API
-async function handleHanetResponse(response) {
-  let responseText;
-  try {
-    responseText = await response.text();
-    const data = JSON.parse(responseText);
-    
-    if (!data || typeof data.returnCode === 'undefined') {
-      throw new Error('Invalid response format from Hanet API');
-    }
-    
-    if (data.returnCode !== 1 && data.returnCode !== 0) {
-      throw new Error(`Hanet API error: ${data.returnMessage || 'Unknown error'}`);
-    }
-    
-    return data;
-  } catch (error) {
-    console.error('Lỗi khi xử lý response:', error);
-    throw new Error(`Lỗi xử lý dữ liệu: ${responseText || error.message}`);
-  }
-}
-
-// Hàm xử lý một phân đoạn
-async function processSegment(placeId, fromTime, toTime, deviceId, accessToken, attempt = 0) {
-  const MAX_RETRIES = 3;
-  const BASE_DELAY = 5000;
-  const MAX_DELAY = 30000;
-
-  if (attempt >= MAX_RETRIES) {
-    throw new Error(`Đã thử ${MAX_RETRIES} lần nhưng không thành công`);
-  }
-
-  const delay = Math.min(BASE_DELAY * Math.pow(2, attempt), MAX_DELAY);
-  if (attempt > 0) {
-    console.log(`Chờ ${delay}ms trước khi thử lại lần ${attempt + 1}`);
-    await new Promise(resolve => setTimeout(resolve, delay));
-  }
-
-  try {
-    const url = `${process.env.HANET_API_URL}/person/getCheckinByPlaceIdInTimestamp`;
-    const formData = new URLSearchParams({
-      token: accessToken,
-      placeID: placeId,
-      from: fromTime.toString(),
-      to: toTime.toString(),
-      size: 200 // Giới hạn kích thước mỗi request
-    });
-
-    if (deviceId) {
-      formData.append('devices', deviceId);
-    }
-
-    console.log('Gọi Hanet API với params:', {
-      placeId,
-      from: new Date(parseInt(fromTime)).toLocaleString(),
-      to: new Date(parseInt(toTime)).toLocaleString(),
-      attempt: attempt + 1
-    });
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formData.toString(),
-      timeout: 30000
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = `Hanet API error: ${response.status}`;
-      
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage += ` - ${errorData.message || errorData.error || errorText}`;
-      } catch {
-        errorMessage += ` - ${errorText}`;
-      }
-      
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
-    
-    if (!data || typeof data.returnCode === 'undefined') {
-      throw new Error('Invalid response format from Hanet API');
-    }
-
-    if (data.returnCode !== 1 && data.returnCode !== 0) {
-      throw new Error(`Hanet API error: ${data.returnMessage || 'Unknown error'}`);
-    }
-
-    return data.data || [];
-  } catch (error) {
-    console.error(`Lỗi trong lần thử ${attempt + 1}:`, error);
-    
-    // Nếu là lỗi xác thực, không thử lại
-    if (error.message.includes('authentication') || 
-        error.message.includes('401')) {
-      throw error;
-    }
-    
-    // Thử lại cho các lỗi khác
-    return processSegment(placeId, fromTime, toTime, deviceId, accessToken, attempt + 1);
-  }
-}
-
-// Hàm chính xử lý request đến Hanet API
-async function getCheckinsByPlaceIdInTimestamp(placeId, fromTime, toTime, deviceId = null) {
-  const accessToken = await ensureValidToken();
-  
-  if (!placeId || !fromTime || !toTime) {
-    throw new Error('Missing required parameters');
-  }
-  
-  // Convert to integers if they're strings
-  const startTime = parseInt(fromTime);
-  const endTime = parseInt(toTime);
-  
-  if (isNaN(startTime) || isNaN(endTime)) {
-    throw new Error('Invalid timestamp format');
-  }
-  
-  const timeRange = endTime - startTime;
-  
-  // Nếu khoảng thời gian lớn hơn MAX_TIME_RANGE, chia nhỏ
-  if (timeRange > MAX_TIME_RANGE) {
-    const segments = [];
-    let currentTime = startTime;
-    
-    while (currentTime < endTime) {
-      const segmentEnd = Math.min(currentTime + MAX_TIME_RANGE, endTime);
-      segments.push({ start: currentTime, end: segmentEnd });
-      currentTime = segmentEnd;
-    }
-    
-    console.log(`Chia thành ${segments.length} phân đoạn để xử lý`);
-    
-    const results = new Map();
-    const failedSegments = [];
-    
-    // Xử lý từng phân đoạn
-    for (const segment of segments) {
-      try {
-        const segmentData = await processSegment(placeId, segment.start, segment.end, deviceId, accessToken);
-        
-        // Lọc và thêm dữ liệu không trùng lặp
-        segmentData.forEach(record => {
-          if (record.personID && record.checkinTime) {
-            const key = `${record.personID}_${record.checkinTime}`;
-            if (!results.has(key)) {
-              results.set(key, record);
-            }
-          }
-        });
-        
-        // Đợi giữa các request
-        await sleep(1000);
-      } catch (error) {
-        console.error('Lỗi khi xử lý phân đoạn:', error);
-        failedSegments.push(segment);
-      }
-    }
-    
-    // Thử lại các phân đoạn thất bại
-    if (failedSegments.length > 0) {
-      console.log(`Thử lại ${failedSegments.length} phân đoạn thất bại...`);
-      
-      for (const segment of failedSegments) {
-        try {
-          await sleep(RETRY_DELAY);
-          const retryData = await processSegment(placeId, segment.start, segment.end, deviceId, accessToken);
-          
-          retryData.forEach(record => {
-            if (record.personID && record.checkinTime) {
-              const key = `${record.personID}_${record.checkinTime}`;
-              if (!results.has(key)) {
-                results.set(key, record);
-              }
-            }
-          });
-        } catch (error) {
-          console.error('Không thể khôi phục phân đoạn sau khi thử lại:', error);
-        }
-      }
-    }
-    
-    return Array.from(results.values());
-  }
-  
-  // Xử lý request đơn lẻ
-  return await processSegment(placeId, fromTime, toTime, deviceId, accessToken);
-}
-
-const MAX_SEGMENT_SIZE = 6 * 60 * 60 * 1000; // 6 giờ mỗi phân đoạn
-
-async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
-  try {
-    console.log('getPeopleListByMethod called with:', {
-      placeId,
-      dateFrom: new Date(parseInt(dateFrom)).toLocaleString(),
-      dateTo: new Date(parseInt(dateTo)).toLocaleString(),
-      devices
-    });
-
-    // Kiểm tra và lấy token
-    const accessToken = await tokenManager.getValidHanetToken();
-    if (!accessToken) {
-      throw new Error('Không lấy được access token hợp lệ');
-    }
-
-    // Chia thành các phân đoạn nhỏ hơn
-    const segments = [];
-    let startTime = parseInt(dateFrom);
-    const endTime = parseInt(dateTo);
-
-    while (startTime < endTime) {
-      segments.push({
-        start: startTime,
-        end: Math.min(startTime + MAX_SEGMENT_SIZE, endTime)
-      });
-      startTime += MAX_SEGMENT_SIZE;
-    }
-
-    console.log(`Đã chia thành ${segments.length} phân đoạn`);
-
-    // Xử lý từng phân đoạn
-    const allResults = [];
-    const failedSegments = [];
-
-    for (let i = 0; i < segments.length; i++) {
-      const segment = segments[i];
-      try {
-        console.log(`Đang xử lý phân đoạn ${i + 1}/${segments.length}`);
-        
-        const url = `${process.env.HANET_API_URL}/person/getCheckinByPlaceIdInTimestamp`;
-        const formData = new URLSearchParams({
-          token: accessToken,
-          placeID: placeId,
-          from: segment.start.toString(),
-          to: segment.end.toString(),
-          size: 200
-        });
-
-        if (devices) {
-          formData.append('devices', devices);
-        }
-
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: formData.toString(),
-          timeout: 30000
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (!result || typeof result.returnCode === 'undefined') {
-          throw new Error('Invalid response format from Hanet API');
-        }
-
-        if (result.returnCode !== 1 && result.returnCode !== 0) {
-          throw new Error(`Hanet API error: ${result.returnMessage || 'Unknown error'}`);
-        }
-
-        const segmentData = result.data || [];
-        allResults.push(...segmentData);
-
-        // Đợi 1 giây giữa các request
-        if (i < segments.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-
-      } catch (error) {
-        console.error(`Lỗi khi xử lý phân đoạn ${i + 1}:`, error);
-        failedSegments.push({ segment, error: error.message });
-        
-        // Đợi lâu hơn nếu gặp lỗi
-        await new Promise(resolve => setTimeout(resolve, 5000));
-      }
-    }
-
-    // Log kết quả
-    console.log('Kết quả xử lý:', {
-      totalSegments: segments.length,
-      successfulSegments: segments.length - failedSegments.length,
-      failedSegments: failedSegments.length,
-      totalRecords: allResults.length
-    });
-
-    if (failedSegments.length > 0) {
-      console.warn('Failed segments:', failedSegments);
-    }
-
-    // Nếu không có kết quả và có lỗi
-    if (allResults.length === 0 && failedSegments.length > 0) {
-      throw new Error(`Không thể lấy dữ liệu từ Hanet API: ${failedSegments[0].error}`);
-    }
-
-    return allResults;
-
-  } catch (error) {
-    console.error('getPeopleListByMethod error:', error);
-    throw error;
-  }
-}
