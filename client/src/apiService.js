@@ -116,93 +116,45 @@ const refreshAuthentication = async () => {
 
 // Xử lý các yêu cầu API với tự động làm mới xác thực
 const fetchWithAuth = async (url, options = {}) => {
-  // Kiểm tra trạng thái xác thực trước khi gửi yêu cầu
-  await checkAuthStatus();
-  
-  try {
-    // Gửi yêu cầu
-    const response = await fetch(url, options);
-    
-    // Nếu yêu cầu thành công, trả về kết quả
-    if (response.ok) {
-      return await response.json();
-    }
-    
-    // Nếu lỗi xác thực (401 hoặc 403)
-    if (response.status === 401 || response.status === 403) {
-      console.log(`[apiService] Lỗi xác thực: ${response.status}, thử làm mới xác thực`);
-      
-      // Thử làm mới xác thực
-      const refreshSuccessful = await refreshAuthentication();
-      
-      if (refreshSuccessful) {
-        console.log('[apiService] Làm mới xác thực thành công, thử lại yêu cầu');
-        
-        // Thử lại yêu cầu
-        const retryResponse = await fetch(url, options);
-        if (retryResponse.ok) {
-          return await retryResponse.json();
-        } else {
-          const errorData = await retryResponse.json().catch(() => ({}));
-          throw new Error(`Lỗi ${retryResponse.status} sau khi làm mới xác thực: ${errorData.message || 'Lỗi không xác định'}`);
-        }
-      } else {
-        throw new Error('Không thể làm mới xác thực. Vui lòng vào trang cấu hình API để xác thực lại.');
-      }
-    }
-    
-    // Xử lý các lỗi khác
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(`Lỗi ${response.status}: ${errorData.message || 'Lỗi không xác định'}`);
-  } catch (error) {
-    console.error('[apiService] Lỗi khi gửi yêu cầu API:', error);
-    throw error;
+  console.log('Calling API:', url);
+  const response = await fetch(url, options);
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error('API error:', data);
+    throw new Error(data.message || 'API request failed');
   }
+
+  if (data.success === false) {
+    throw new Error(data.message || 'Request was not successful');
+  }
+
+  // Nếu response có cấu trúc metadata và data, trả về data
+  if (data.metadata && Array.isArray(data.data)) {
+    console.log('API response metadata:', data.metadata);
+    return data.data;
+  }
+
+  // Nếu response là mảng trực tiếp, trả về nó
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  // Nếu response có data là mảng, trả về data
+  if (data.data && Array.isArray(data.data)) {
+    return data.data;
+  }
+
+  console.warn('Unexpected API response format:', data);
+  return [];
 };
 
 // Hàm sleep helper
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Hàm tính thời gian chờ theo exponential backoff
-const calculateBackoff = (attempt, baseDelay = 2000, maxDelay = 30000) => {
-  const delay = Math.min(baseDelay * Math.pow(2, attempt), maxDelay);
-  return delay + Math.random() * 1000; // Thêm jitter
-};
-
-// Hàm thử lại request với exponential backoff
-const fetchWithRetry = async (url, maxRetries = 3) => {
-  let lastError = null;
-  
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      if (attempt > 0) {
-        const delay = calculateBackoff(attempt);
-        console.log(`Thử lại lần ${attempt + 1}/${maxRetries} sau ${delay}ms cho URL: ${url}`);
-        await sleep(delay);
-      }
-      
-      return await fetchWithAuth(url);
-    } catch (error) {
-      lastError = error;
-      console.warn(`Lỗi lần thử ${attempt + 1}/${maxRetries}:`, error.message);
-      
-      // Nếu là lỗi xác thực, không thử lại
-      if (error.message.includes('401') || error.message.includes('403')) {
-        throw error;
-      }
-      
-      // Nếu là lỗi timeout hoặc server, thử lại
-      if (error.message.includes('timeout') || 
-          error.message.includes('500') ||
-          error.message.includes('Gateway')) {
-        continue;
-      }
-      
-      throw error;
-    }
-  }
-  
-  throw lastError || new Error('Không thể kết nối đến máy chủ sau nhiều lần thử');
+const calculateBackoff = (attempt, baseDelay = 1000) => {
+  return Math.min(baseDelay * Math.pow(2, attempt), 30000);
 };
 
 // API functions
@@ -237,7 +189,7 @@ const apiService = {
     
     // Kiểm tra khoảng thời gian để phát hiện có cần chia nhỏ hay không
     const diffInHours = (toTimestamp - fromTimestamp) / (1000 * 60 * 60);
-    const MAX_HOURS = 24; // Giới hạn mỗi lần truy vấn
+    const MAX_HOURS = 72; // Giới hạn theo server API
     
     // Hàm thử lại truy vấn khi gặp lỗi
     const fetchWithRetry = async (url, maxRetries = 3) => {
@@ -253,232 +205,66 @@ const apiService = {
           
           const result = await fetchWithAuth(url);
           
-          // Kiểm tra kết quả
-          if (!result || (Array.isArray(result) && result.length === 0)) {
-            console.warn('Nhận được kết quả rỗng từ API');
-          }
+          // Kiểm tra và log kết quả
+          console.log(`Received ${result ? (Array.isArray(result) ? result.length : 'non-array') : 'no'} results`);
           
           return result;
         } catch (error) {
           lastError = error;
           console.warn(`Lỗi lần thử ${attempt + 1}/${maxRetries}:`, error.message);
           
-          // Kiểm tra các loại lỗi khác nhau
-          if (error.message) {
-            // Lỗi xác thực - không cần thử lại
-            if (error.message.includes('401') || error.message.includes('403')) {
-              throw error;
-            }
-            
-            // Lỗi timeout hoặc gateway - có thể thử lại
-            if (error.message.includes('timeout') || 
-                error.message.includes('504') ||
-                error.message.includes('Gateway')) {
-              // Tiếp tục vòng lặp để thử lại
-              continue;
-            }
-            
-            // Lỗi server (500) - thử lại với thời gian chờ dài hơn
-            if (error.message.includes('500')) {
-              await sleep(calculateBackoff(attempt, 5000)); // Tăng thời gian chờ base lên 5s
-              continue;
-            }
+          if (error.message.includes('401') || error.message.includes('403')) {
+            throw error; // Lỗi xác thực - không thử lại
+          }
+          
+          if (error.message.includes('429')) {
+            await sleep(calculateBackoff(attempt, 10000)); // Rate limit - chờ lâu hơn
+            continue;
+          }
+          
+          if (error.message.includes('500')) {
+            await sleep(calculateBackoff(attempt, 5000));
+            continue;
           }
         }
       }
       
-      // Nếu đã thử hết số lần mà vẫn lỗi
       throw lastError || new Error('Không thể kết nối đến máy chủ sau nhiều lần thử');
     };
     
-    // Nếu khoảng thời gian nhỏ hơn 24 giờ, thực hiện truy vấn bình thường
-    if (diffInHours <= MAX_HOURS) {
-      let url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${fromTimestamp}&dateTo=${toTimestamp}`;
-      if (deviceId) {
-        url += `&devices=${deviceId}`;
-      }
-      
-      try {
-        return await fetchWithRetry(url);
-      } catch (error) {
-        if (error.message && (error.message.includes('timeout') || 
-            error.message.includes('FUNCTION_INVOCATION_TIMEOUT') ||
-            error.message.includes('Gateway Timeout'))) {
-          throw new Error('Yêu cầu mất quá nhiều thời gian để xử lý. Vui lòng thử với khoảng thời gian ngắn hơn.');
-        }
-        throw error;
-      }
+    // Nếu khoảng thời gian vượt quá giới hạn
+    if (diffInHours > MAX_HOURS) {
+      throw new Error(`Khoảng thời gian truy vấn không được vượt quá ${MAX_HOURS} giờ`);
     }
     
-    // Nếu khoảng thời gian lớn hơn, chia nhỏ thành nhiều lần truy vấn
-    console.log(`Khoảng thời gian lớn (${diffInHours.toFixed(1)} giờ), chia nhỏ thành nhiều lần truy vấn`);
-    
-    // Tính số lần cần chia
-    const segmentCount = Math.ceil(diffInHours / MAX_HOURS);
-    // Chia khoảng thời gian thành các đoạn bằng nhau
-    const segmentMs = Math.floor((toTimestamp - fromTimestamp) / segmentCount);
-    
-    // Lưu trữ các đoạn thời gian cần truy vấn
-    const segments = [];
-    for (let i = 0; i < segmentCount; i++) {
-      const start = fromTimestamp + (i * segmentMs);
-      const end = (i === segmentCount - 1) ? toTimestamp : fromTimestamp + ((i + 1) * segmentMs) - 1;
-      segments.push({ start, end, index: i + 1 });
+    // Tạo URL API
+    let url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${fromTimestamp}&dateTo=${toTimestamp}`;
+    if (deviceId) {
+      url += `&devices=${deviceId}`;
     }
     
-    // Hiển thị thông báo cho người dùng
-    console.log(`Đang thực hiện ${segmentCount} lần truy vấn để lấy dữ liệu từ ${new Date(fromTimestamp).toLocaleString()} đến ${new Date(toTimestamp).toLocaleString()}`);
-    
-    // Thực hiện nhiều lần truy vấn và kết hợp kết quả
-    let allResults = [];
-    let errors = [];
-    let processedCount = 0;
-    
-    // Khử sử dụng cho trường hợp trùng dữ liệu
-    const uniqueRecords = new Map();
-    
-    // Xử lý từng đoạn thời gian
-    for (const segment of segments) {
-      console.log(`Đang lấy dữ liệu phần ${segment.index}/${segmentCount}: ${new Date(segment.start).toLocaleString()} - ${new Date(segment.end).toLocaleString()}`);
-      
-      let url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${segment.start}&dateTo=${segment.end}`;
-      if (deviceId) {
-        url += `&devices=${deviceId}`;
-      }
-      
-      try {
-        // Sử dụng hàm thử lại
-        const segmentResult = await fetchWithRetry(url);
-        processedCount++;
-        
-        if (Array.isArray(segmentResult)) {
-          console.log(`Đã nhận ${segmentResult.length} bản ghi từ phần ${segment.index}/${segmentCount}`);
-          
-          // Thêm các bản ghi duy nhất (lọc trùng bằng ID hoặc thời gian check-in)
-          for (const record of segmentResult) {
-            // Tạo khóa duy nhất cho mỗi bản ghi
-            const recordKey = `${record.personID}_${record.checkinTime}`;
-            if (!uniqueRecords.has(recordKey)) {
-              uniqueRecords.set(recordKey, record);
-            }
-          }
-        }
-      } catch (error) {
-        console.error(`Lỗi khi lấy dữ liệu phần ${segment.index}/${segmentCount}:`, error.message);
-        errors.push(`Phần ${segment.index}: ${error.message}`);
-      }
-      
-      // Cập nhật tiến trình
-      console.log(`Tiến trình: ${processedCount}/${segmentCount} phần (${Math.round(processedCount/segmentCount*100)}%)`);
-    }
-    
-    // Chuyển Map thành mảng kết quả
-    allResults = Array.from(uniqueRecords.values());
-    
-    // Kiểm tra nếu không có kết quả nào và có lỗi
-    if (allResults.length === 0 && errors.length > 0) {
-      throw new Error(`Không thể lấy dữ liệu. Lỗi: ${errors.join(', ')}`);
-    }
-    
-    // Sắp xếp kết quả theo thời gian check-in
-    allResults.sort((a, b) => a.checkinTime - b.checkinTime);
-    
-    console.log(`Hoàn tất! Đã lấy tổng cộng ${allResults.length} bản ghi duy nhất.`);
-    return allResults;
-  },
-  
-  async getCheckins(placeId, dateFrom, dateTo, deviceId = null) {
-    const SEGMENT_SIZE = 6 * 60 * 60 * 1000; // 6 giờ mỗi phân đoạn
-    const SEGMENT_DELAY = 2000;
-    
-    if (!placeId || !dateFrom || !dateTo) {
-      throw new Error('Thiếu tham số bắt buộc');
-    }
-    
-    let start = parseInt(dateFrom);
-    const end = parseInt(dateTo);
-    
-    if (isNaN(start) || isNaN(end)) {
-      throw new Error('Thời gian không hợp lệ');
-    }
-    
-    // Chia thành các phân đoạn
-    const segments = [];
-    while (start < end) {
-      segments.push({
-        start: start,
-        end: Math.min(start + SEGMENT_SIZE, end),
-        index: segments.length + 1
+    try {
+      console.log('Fetching data:', {
+        placeId,
+        fromDateTime: new Date(fromTimestamp).toLocaleString(),
+        toDateTime: new Date(toTimestamp).toLocaleString(),
+        deviceId
       });
-      start += SEGMENT_SIZE;
-    }
-    
-    console.log(`Chia thành ${segments.length} phân đoạn để xử lý`);
-    
-    const uniqueRecords = new Map();
-    const failedSegments = [];
-    
-    // Xử lý từng phân đoạn
-    for (const segment of segments) {
-      const url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${segment.start}&dateTo=${segment.end}${deviceId ? `&devices=${deviceId}` : ''}`;
       
-      try {
-        console.log(`Đang xử lý phân đoạn ${segment.index}/${segments.length}: ${new Date(segment.start).toLocaleString()} - ${new Date(segment.end).toLocaleString()}`);
-        
-        const segmentResult = await fetchWithRetry(url);
-        
-        if (Array.isArray(segmentResult)) {
-          console.log(`Nhận được ${segmentResult.length} bản ghi từ phân đoạn ${segment.index}`);
-          
-          for (const record of segmentResult) {
-            if (!record.personID || !record.checkinTime) continue;
-            
-            const key = `${record.personID}_${record.checkinTime}`;
-            if (!uniqueRecords.has(key)) {
-              uniqueRecords.set(key, record);
-            }
-          }
-        } else {
-          console.warn(`Phân đoạn ${segment.index} trả về dữ liệu không hợp lệ:`, segmentResult);
-          failedSegments.push(segment);
-        }
-      } catch (error) {
-        console.error(`Lỗi khi xử lý phân đoạn ${segment.index}:`, error);
-        failedSegments.push(segment);
+      const results = await fetchWithRetry(url);
+      
+      if (!Array.isArray(results)) {
+        console.error('Invalid API response format:', results);
+        throw new Error('Định dạng dữ liệu không hợp lệ từ API');
       }
       
-      await sleep(SEGMENT_DELAY);
-    }
-    
-    // Thử lại các phân đoạn thất bại
-    if (failedSegments.length > 0) {
-      console.log(`Thử lại ${failedSegments.length} phân đoạn thất bại...`);
+      console.log(`Nhận được ${results.length} bản ghi từ API`);
+      return results;
       
-      for (const segment of failedSegments) {
-        try {
-          await sleep(5000);
-          const url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${segment.start}&dateTo=${segment.end}${deviceId ? `&devices=${deviceId}` : ''}`;
-          const retryResult = await fetchWithRetry(url, 5);
-          
-          if (Array.isArray(retryResult)) {
-            for (const record of retryResult) {
-              if (!record.personID || !record.checkinTime) continue;
-              
-              const key = `${record.personID}_${record.checkinTime}`;
-              if (!uniqueRecords.has(key)) {
-                uniqueRecords.set(key, record);
-              }
-            }
-          }
-        } catch (error) {
-          console.error(`Không thể khôi phục phân đoạn ${segment.index}:`, error);
-        }
-      }
+    } catch (error) {
+      console.error('Error fetching checkins:', error);
+      throw error;
     }
-    
-    const results = Array.from(uniqueRecords.values());
-    console.log(`Tổng số bản ghi duy nhất: ${results.length}`);
-    return results;
   }
 };
 
