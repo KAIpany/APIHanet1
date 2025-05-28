@@ -286,10 +286,6 @@ const apiService = {
     const fromTimestamp = new Date(fromDateTime).getTime();
     const toTimestamp = new Date(toDateTime).getTime();
     
-    // Kiểm tra khoảng thời gian để phát hiện có cần chia nhỏ hay không
-    const diffInHours = (toTimestamp - fromTimestamp) / (1000 * 60 * 60);
-    const MAX_HOURS = 72; // Giới hạn theo server API
-    
     // Hàm thử lại truy vấn khi gặp lỗi
     const fetchWithRetry = async (url, maxRetries = 3) => {
       let lastError = null;
@@ -330,11 +326,6 @@ const apiService = {
       
       throw lastError || new Error('Không thể kết nối đến máy chủ sau nhiều lần thử');
     };
-    
-    // Nếu khoảng thời gian vượt quá giới hạn
-    if (diffInHours > MAX_HOURS) {
-      throw new Error(`Khoảng thời gian truy vấn không được vượt quá ${MAX_HOURS} giờ`);
-    }
     
     // Tạo URL API
     let url = `${API_URL}/api/checkins?placeId=${placeId}&dateFrom=${fromTimestamp}&dateTo=${toTimestamp}`;
