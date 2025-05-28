@@ -228,77 +228,57 @@ textarea:focus {
 }
 
 /* Results section */
+/* Results section */
 .results-container {
   margin-top: 2.5rem;
-  max-width: 1000px;
-  margin-left: auto;
-  margin-right: auto;
+  width: 100%;
+  display: flex; /* Sử dụng flexbox để căn giữa */
+  justify-content: center; /* Căn giữa theo chiều ngang */
+}
+
+.results-content {
+  width: 100%;
+  max-width: 1200px; /* Bạn có thể điều chỉnh độ rộng tối đa này */
 }
 
 .results-title {
   font-size: 1.25rem;
   font-weight: 600;
   margin-bottom: 1rem;
-  text-align: center;
+  text-align: center; /* Căn giữa tiêu đề */
 }
 
 .table-container {
-  overflow-x: auto;
-  margin-bottom: 1.5rem;
-}
-
-.checkin-results-center {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  margin-top: 32px;
-  width: 100%;
-}
-
-.results-section {
-  width: 100%;
-  max-width: 1200px;
-  margin: 0;
-  margin-top: 0;
-  text-align: left;
-}
-
-.results-section h3 {
-  text-align: left;
+  overflow-x: auto; /* Cho phép cuộn ngang nếu bảng quá rộng */
 }
 
 .results-table {
-  margin-left: 0;
-  margin-right: auto;
-  text-align: left;
-  width: 100%;
+  width: 100%; /* Bảng chiếm toàn bộ chiều rộng của container */
   border-collapse: collapse;
-  margin-top: 8px;
+  margin-top: 1rem;
+  table-layout: fixed; /* Giúp các cột có chiều rộng đều nhau hơn */
 }
 
-.results-table th, .results-table td {
-  text-align: left;
+.results-table th,
+.results-table td {
+  padding: 0.75rem;
+  text-align: center; /* Căn giữa nội dung trong các ô */
+  border: 1px solid #e5e5e5; /* Thêm viền để dễ nhìn hơn */
+  word-wrap: break-word; /* Tự động ngắt từ nếu quá dài */
 }
 
 .results-table th {
-  background: #f5f5f5;
-}
-
-.results-table tbody tr {
-  border-top: 1px solid #e5e5e5;
+  background-color: #f5f5f5;
+  font-weight: 600;
 }
 
 .results-table tbody tr:hover {
   background-color: #f9fafb;
 }
 
-.monospace {
-  font-family: monospace;
-}
-
 .no-results {
   text-align: center;
+  margin-top: 1.5rem;
   color: #6b7280;
 }
 
