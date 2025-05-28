@@ -6,11 +6,32 @@ const getDeviceById = require("./getDeviceByPlaceId");
 const hanetServiceId = require("./hanetServiceId");
 const cors = require("cors");
 const tokenManager = require("./tokenManager");
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Thay đổi dòng 11-12 thành:
+// Request ID middleware
+app.use((req, res, next) => {
+  req.id = crypto.randomBytes(16).toString('hex');
+  next();
+});
+
+// Logging middleware with request ID
+app.use((req, res, next) => {
+  const start = Date.now();
+  console.log(`[${new Date().toISOString()}] Request started - ID: ${req.id} ${req.method} ${req.originalUrl}`);
+  
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    console.log(
+      `[${new Date().toISOString()}] Request completed - ID: ${req.id} ${req.method} ${req.originalUrl} - ${res.statusCode} (${duration}ms)`
+    );
+  });
+  next();
+});
+
+// CORS configuration
 app.use(
   cors({
     origin: [
@@ -148,27 +169,38 @@ app.get("/api/checkins", validateCheckinParams, async (req, res, next) => {
   try {
     const { placeId, fromTimestamp, toTimestamp, devices } = req.validatedParams;
 
-    // Log chi tiết request để debug
+    // Log request details
     console.log('Request params:', {
       placeId,
       fromTimestamp: new Date(parseInt(fromTimestamp)).toLocaleString(),
       toTimestamp: new Date(parseInt(toTimestamp)).toLocaleString(),
-      devices
+      devices,
+      requestId: req.id
     });
 
-    // Kiểm tra khoảng thời gian
-    const timeDiff = (toTimestamp - fromTimestamp) / (1000 * 60 * 60); // Giờ
-    if (timeDiff > 72) { // Giới hạn 72 giờ
+    // Validate time range
+    const timeDiff = (toTimestamp - fromTimestamp) / (1000 * 60 * 60); // Hours
+    if (timeDiff > 72) {
       return res.status(400).json({
         success: false,
-        message: 'Khoảng thời gian truy vấn không được vượt quá 72 giờ'
+        message: 'Query time range cannot exceed 72 hours',
+        details: {
+          requestedHours: Math.round(timeDiff),
+          maxAllowedHours: 72
+        }
       });
     }
 
-    // Tính thời gian thực hiện
+    // Performance monitoring
     const startTime = process.hrtime();
     
     try {
+      // Validate token before making the request
+      const token = await tokenManager.getValidHanetToken();
+      if (!token) {
+        throw new Error('Failed to obtain valid access token');
+      }
+
       const filteredCheckins = await hanetServiceId.getPeopleListByMethod(
         placeId,
         fromTimestamp,
@@ -176,55 +208,77 @@ app.get("/api/checkins", validateCheckinParams, async (req, res, next) => {
         devices
       );
       
-      // Tính thời gian đã thực hiện
+      // Calculate execution time
       const endTime = process.hrtime(startTime);
       const timeInSeconds = endTime[0] + endTime[1] / 1e9;
       
-      // Log kết quả để debug
+      // Log response details
       console.log('API Response:', {
+        requestId: req.id,
         recordCount: Array.isArray(filteredCheckins) ? filteredCheckins.length : 'invalid',
         executionTime: timeInSeconds.toFixed(2) + 's'
       });
 
+      // Validate response format
       if (!Array.isArray(filteredCheckins)) {
         throw new Error('Invalid response format from Hanet service');
       }
 
-      res.status(200).json(filteredCheckins);
+      // Send success response with metadata
+      res.status(200).json({
+        success: true,
+        metadata: {
+          recordCount: filteredCheckins.length,
+          timeRange: {
+            from: new Date(parseInt(fromTimestamp)).toISOString(),
+            to: new Date(parseInt(toTimestamp)).toISOString()
+          },
+          executionTime: timeInSeconds.toFixed(2) + 's'
+        },
+        data: filteredCheckins
+      });
     } catch (error) {
+      // Log detailed error information
       console.error('Error details:', {
+        requestId: req.id,
         message: error.message,
         stack: error.stack,
-        code: error.code
+        code: error.code,
+        params: {
+          placeId,
+          fromTimestamp,
+          toTimestamp,
+          devices
+        }
       });
 
-      // Xử lý các loại lỗi cụ thể
-      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-        return res.status(504).json({
-          success: false,
-          message: 'Request timeout. Vui lòng thử lại với khoảng thời gian ngắn hơn.',
-          error: 'TIMEOUT_ERROR'
-        });
-      }
-
+      // Handle specific error types
       if (error.message.includes('authentication') || error.message.includes('token')) {
         return res.status(401).json({
           success: false,
-          message: 'Lỗi xác thực với Hanet API',
-          error: 'AUTH_ERROR'
+          error: 'Authentication failed',
+          message: 'Failed to authenticate with Hanet API'
+        });
+      }
+      
+      if (error.message.includes('API error: 429')) {
+        return res.status(429).json({
+          success: false,
+          error: 'Rate limit exceeded',
+          message: 'Too many requests to Hanet API, please try again later'
         });
       }
 
-      // Các lỗi khác
+      // General error response
       res.status(500).json({
         success: false,
-        message: 'Lỗi khi xử lý yêu cầu: ' + error.message,
-        error: 'INTERNAL_ERROR'
+        error: 'Internal server error',
+        message: 'An error occurred while processing your request',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
-  } catch (err) {
-    console.error('Unhandled error:', err);
-    next(err);
+  } catch (error) {
+    next(error);
   }
 });
 
