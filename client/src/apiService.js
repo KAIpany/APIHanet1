@@ -225,10 +225,56 @@ const apiService = {
   
   // Lấy danh sách thiết bị theo địa điểm
   async getDevices(placeId) {
-    if (!placeId) {
-      throw new Error('Thiếu tham số placeId');
+    try {
+      console.log('Fetching devices for placeId:', placeId);
+      
+      if (!placeId) {
+        throw new Error('Thiếu tham số placeId');
+      }
+      
+      const response = await fetch(`${API_URL}/api/device?placeId=${placeId}`);
+      const data = await response.json();
+      
+      console.log('Devices API Response:', data);
+      
+      // Validate response
+      if (!data) {
+        console.error('Empty response from devices API');
+        return { success: false, message: 'Không nhận được dữ liệu từ API' };
+      }
+      
+      // Check for API error
+      if (data.success === false) {
+        console.error('API returned error:', data.message);
+        return { success: false, message: data.message || 'Lỗi khi lấy danh sách thiết bị' };
+      }
+      
+      // Handle successful response with data.data array
+      if (data.success && Array.isArray(data.data)) {
+        console.log(`Found ${data.data.length} devices`);
+        return { success: true, data: data.data };
+      }
+      
+      // Handle direct array response
+      if (Array.isArray(data)) {
+        console.log(`Found ${data.length} devices (direct array)`);
+        return { success: true, data: data };
+      }
+      
+      // Handle single device response
+      if (data.data) {
+        console.log('Converting device data to array');
+        const devices = Array.isArray(data.data) ? data.data : [data.data];
+        return { success: true, data: devices };
+      }
+      
+      console.error('Invalid device data format:', data);
+      return { success: false, message: 'Dữ liệu thiết bị không hợp lệ' };
+      
+    } catch (error) {
+      console.error('Error fetching devices:', error);
+      return { success: false, message: 'Lỗi khi lấy danh sách thiết bị: ' + error.message };
     }
-    return await fetchWithAuth(`${API_URL}/api/device?placeId=${placeId}`);
   },
   
   // Lấy dữ liệu check-in
