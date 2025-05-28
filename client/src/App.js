@@ -738,19 +738,44 @@ const CheckInApp = () => {
     setResultsData(null);
   };
 
-  const handlePlaceChange = (event) => {
-    const { value } = event.target;
-    setFormData((prevState) => ({
-      ...prevState,
-      placeId: value,
-      deviceId: "",
+  const handlePlaceChange = useCallback(async (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+      deviceId: "" // Reset device selection when place changes
     }));
-    setSubmitError(null);
-    setSuccessMessage(null);
-    setDeviceError(null);
-    setDevices([]);
-    setResultsData(null);
-  };
+
+    // Only fetch devices if a place is selected
+    if (value) {
+      setIsDevicesLoading(true);
+      setDeviceError(null);
+      setDevices([]);
+      
+      try {
+        console.log('Loading devices for place:', value);
+        const deviceResponse = await apiService.getDevices(value);
+        
+        if (deviceResponse.success) {
+          console.log(`Loaded ${deviceResponse.data.length} devices`);
+          setDevices(deviceResponse.data);
+        } else {
+          console.error('Error loading devices:', deviceResponse.message);
+          throw new Error(deviceResponse.message);
+        }
+      } catch (err) {
+        console.error('Error loading devices:', err);
+        setDeviceError(err.message || 'Lỗi khi tải danh sách thiết bị');
+        setDevices([]);
+      } finally {
+        setIsDevicesLoading(false);
+      }
+    } else {
+      // Reset devices when no place is selected
+      setDevices([]);
+      setDeviceError(null);
+    }
+  }, []);
 
   const getPlaceName = useCallback(
     (id) => {
@@ -1145,7 +1170,7 @@ const CheckInApp = () => {
                 </div>
               </div>
             ))
-          ) : (
+           (
             <div className="no-accounts">
               Không có tài khoản nào
               <div>
