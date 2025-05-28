@@ -153,60 +153,62 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
   console.log(`Đã nhận yêu cầu truy vấn từ ${fromDate.toLocaleString()} đến ${toDate.toLocaleString()} (${diffInHours.toFixed(1)} giờ)`);
 
   // Giới hạn thời gian mỗi lần truy vấn API và số trang tối đa
-  const MAX_HOURS = 12; // Giảm từ 24 xuống 12 giờ để tránh timeout
-  const MAX_PAGES = 20;
-  const MAX_RETRIES = 5; // Tăng số lần retry
-  const BASE_TIMEOUT = 60000; // Tăng timeout cơ bản lên 60 giây
+  const MAX_HOURS = 6; // Giảm xuống 6 giờ để tránh timeout
+  const MAX_PAGES = 10; // Giảm số trang mỗi lần truy vấn
+  const MAX_RETRIES = 3; // Số lần thử lại cho mỗi request
+  const BASE_TIMEOUT = 30000; // Timeout cơ bản 30 giây
+  const MAX_SEGMENT_SIZE = 10000; // Số bản ghi tối đa mỗi phân đoạn
   
-  // Hàm thử lại truy vấn với timeout tăng dần
+  // Hàm thử lại truy vấn với timeout tăng dần và exponential backoff
   const fetchWithRetry = async (url, data, attempt = 0) => {
-    const timeout = BASE_TIMEOUT * (attempt + 1); // Tăng timeout theo số lần thử
-    let lastError;
+    const timeout = Math.min(BASE_TIMEOUT * Math.pow(2, attempt), 120000); // Max 120s
+    const delayMs = attempt > 0 ? Math.min(1000 * Math.pow(2, attempt - 1), 10000) : 0; // Max 10s delay
     
     try {
-      if (attempt > 0) {
-        const delayMs = 2000 * (attempt + 1);
+      if (delayMs > 0) {
         console.log(`Chờ ${delayMs}ms trước khi thử lại lần ${attempt + 1}...`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
       
       const config = {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "application/json"
+        },
         timeout: timeout,
+        validateStatus: status => status === 200 // Chỉ chấp nhận status 200
       };
       
-      console.log(`Thực hiện request với timeout ${timeout}ms`);
+      console.log(`Thực hiện request với timeout ${timeout}ms (lần thử ${attempt + 1}/${MAX_RETRIES})`);
       const response = await axios.post(url, qs.stringify(data), config);
+      
+      if (!response.data || typeof response.data.returnCode === "undefined") {
+        throw new Error("Invalid response format from HANET API");
+      }
+      
       return response;
     } catch (error) {
-      lastError = error;
       if (attempt < MAX_RETRIES - 1) {
-        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-          console.log(`Request timeout sau ${timeout}ms, sẽ thử lại với timeout dài hơn...`);
-          return fetchWithRetry(url, data, attempt + 1);
-        }
+        console.log(`Lỗi request (${error.message}), sẽ thử lại...`);
+        return fetchWithRetry(url, data, attempt + 1);
       }
-      throw lastError;
+      throw error;
     }
   };
 
   // Hàm thực hiện một lần truy vấn API trong khoảng thời gian nhỏ
   const fetchSegment = async (startTime, endTime, recursionDepth = 0) => {
-    const MAX_RECURSION = 3;
+    const MAX_RECURSION = 2; // Giảm độ sâu đệ quy
     if (recursionDepth > MAX_RECURSION) {
       console.warn(`Đã đạt giới hạn đệ quy (${MAX_RECURSION}), dừng phân chia.`);
       return [];
     }
 
     let segmentData = [];
-    let totalRecords = 0;
-    let hasMorePages = true;
-    let encounteredTimeout = false;
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 3;
     
-    // Thiết lập số lần thử lại cố định cho mỗi trang
-    const PAGE_RETRIES = 3;
-    
-    for (let index = 1; index <= MAX_PAGES && hasMorePages; index++) {
+    for (let index = 1; index <= MAX_PAGES; index++) {
       const apiUrl = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
       const requestData = {
         token: accessToken,
@@ -214,146 +216,99 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
         from: startTime,
         to: endTime,
         ...(devices && { devices: devices }),
-        size: 500,
+        size: 200, // Giảm kích thước mỗi trang
         page: index,
       };
 
-      let pageSuccess = false;
-      let pageData = [];
-      
-      for (let attempt = 0; attempt <= PAGE_RETRIES && !pageSuccess; attempt++) {
-        try {
-          console.log(`Đang gọi HANET API cho placeID=${placeId}, khoảng ${new Date(parseInt(startTime)).toLocaleString()} - ${new Date(parseInt(endTime)).toLocaleString()}, trang ${index}/${MAX_PAGES}...`);
+      try {
+        console.log(`Đang gọi HANET API: ${new Date(parseInt(startTime)).toLocaleString()} - ${new Date(parseInt(endTime)).toLocaleString()}, trang ${index}/${MAX_PAGES}`);
         
-          const response = await fetchWithRetry(apiUrl, requestData);                if (response.data && typeof response.data.returnCode !== "undefined") {
-            if (response.data.returnCode === 1 || response.data.returnCode === 0) {
-              if (Array.isArray(response.data.data)) {
-                pageData = response.data.data;
-                pageSuccess = true;
-              
-                if (pageData.length === 0) {
-                  console.log(`Không còn dữ liệu ở trang ${index}, dừng truy vấn.`);
-                  hasMorePages = false;
-                  break;
-                }
-                
-                if (pageData.length < 500) {
-                  hasMorePages = false;
-                  console.log(`Đã nhận ${pageData.length} bản ghi < 500, có thể đã hết dữ liệu.`);
-                }
-              } else {
-                console.warn(`Dữ liệu trả về không phải mảng.`);
-              }
-            } else {
-              console.error(
-                `Lỗi logic từ HANET: Mã lỗi ${response.data.returnCode}, Thông điệp: ${response.data.returnMessage || "N/A"}`
-              );
-            }
-          } else {
-            console.error(`Response không hợp lệ từ HANET:`, response.data);
+        const response = await fetchWithRetry(apiUrl, requestData);
+        
+        if (response.data.returnCode === 1 || response.data.returnCode === 0) {
+          const pageData = response.data.data || [];
+          
+          if (pageData.length === 0) {
+            console.log(`Không còn dữ liệu ở trang ${index}, dừng truy vấn.`);
+            break;
           }
-        } catch (error) {
-          console.error(`Không thể lấy dữ liệu cho trang ${index} (lần thử ${attempt + 1}):`, error.message);
-          if (error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'))) {
-            encounteredTimeout = true;
+          
+          segmentData = [...segmentData, ...pageData];
+          console.log(`Nhận được ${pageData.length} bản ghi từ trang ${index}`);
+          
+          if (pageData.length < 200) {
+            console.log(`Đã nhận đủ dữ liệu cho phân đoạn này.`);
+            break;
           }
+          
+          // Kiểm tra kích thước của segmentData
+          if (segmentData.length >= MAX_SEGMENT_SIZE) {
+            console.log(`Đạt giới hạn ${MAX_SEGMENT_SIZE} bản ghi, chia nhỏ phân đoạn.`);
+            const midTs = Math.floor((parseInt(startTime) + parseInt(endTime)) / 2);
+            const firstHalf = await fetchSegment(startTime, midTs.toString(), recursionDepth + 1);
+            const secondHalf = await fetchSegment(midTs.toString(), endTime, recursionDepth + 1);
+            return [...firstHalf, ...secondHalf];
+          }
+          
+          consecutiveErrors = 0; // Reset đếm lỗi khi thành công
+        } else {
+          throw new Error(`HANET API error: ${response.data.returnMessage || 'Unknown error'}`);
         }
+      } catch (error) {
+        console.error(`Lỗi khi lấy dữ liệu trang ${index}:`, error.message);
+        consecutiveErrors++;
+        
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          console.log(`Đã gặp ${consecutiveErrors} lỗi liên tiếp, thử chia nhỏ khoảng thời gian...`);
+          if (recursionDepth < MAX_RECURSION) {
+            const midTs = Math.floor((parseInt(startTime) + parseInt(endTime)) / 2);
+            const firstHalf = await fetchSegment(startTime, midTs.toString(), recursionDepth + 1);
+            const secondHalf = await fetchSegment(midTs.toString(), endTime, recursionDepth + 1);
+            return [...firstHalf, ...secondHalf];
+          }
+          break;
+        }
+        
+        // Tạm dừng trước khi thử trang tiếp theo
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
-      
-      if (pageSuccess && pageData.length > 0) {
-        segmentData = [...segmentData, ...pageData];
-        totalRecords += pageData.length;
-        console.log(`Đã nhận ${pageData.length} bản ghi từ trang ${index}, tổng cộng: ${totalRecords}`);
-      }
-    }
-    
-    if (encounteredTimeout && totalRecords === 0 && recursionDepth < MAX_RECURSION) {
-      console.log(`Chia nhỏ khoảng thời gian do timeout (độ sâu đệ quy: ${recursionDepth})`);
-      const startTs = parseInt(startTime, 10);
-      const endTs = parseInt(endTime, 10);
-      const midTs = Math.floor((startTs + endTs) / 2);
-      
-      console.log(`Chia khoảng thời gian ${new Date(startTs).toLocaleString()} - ${new Date(endTs).toLocaleString()} thành 2 phần`);
-      
-      const firstHalfData = await fetchSegment(startTs.toString(), midTs.toString(), recursionDepth + 1);
-      const secondHalfData = await fetchSegment(midTs.toString(), endTs.toString(), recursionDepth + 1);
-      
-      return [...firstHalfData, ...secondHalfData];
     }
     
     return segmentData;
   };
-  
-  let allData = [];
-  
-  if (diffInHours <= MAX_HOURS) {
-    console.log(`Khoảng thời gian nhỏ hơn ${MAX_HOURS} giờ, thực hiện truy vấn trực tiếp.`);
-    allData = await fetchSegment(dateFrom, dateTo);
-  } else {
-    console.log(`Khoảng thời gian lớn (${diffInHours.toFixed(1)} giờ), chia nhỏ thành nhiều lần truy vấn.`);
-    
-    const segmentCount = Math.ceil(diffInHours / (MAX_HOURS * 0.95));
-    const segmentMs = Math.floor((toDate - fromDate) / segmentCount);
-    const overlap = Math.floor(segmentMs * 0.05);
-    
-    console.log(`Sẽ thực hiện ${segmentCount} lần truy vấn với chồng lấp để đảm bảo độ phủ.`);
-    
-    let rawCheckinData = [];
-    for (let i = 0; i < segmentCount; i++) {
-      let segmentStart = fromDate.getTime() + (i * segmentMs);
-      if (i > 0) {
-        segmentStart -= overlap;
-      }
-      
-      let segmentEnd = i === segmentCount - 1 ? toDate.getTime() : fromDate.getTime() + ((i + 1) * segmentMs);
-      
-      console.log(`Đang xử lý phần ${i+1}/${segmentCount}: ${new Date(segmentStart).toLocaleString()} - ${new Date(segmentEnd).toLocaleString()}`);
-      
-      try {
-        const segmentData = await fetchSegment(segmentStart.toString(), segmentEnd.toString());
-        console.log(`Đã nhận ${segmentData.length} bản ghi từ phần ${i+1}/${segmentCount}`);
-        rawCheckinData = [...rawCheckinData, ...segmentData];
-      } catch (error) {
-        console.error(`Lỗi khi xử lý phần ${i+1}/${segmentCount}:`, error.message);
-      }
-    }
-    
-    allData = rawCheckinData;
-  }
-  
-  console.log(`Đã nhận tổng cộng ${allData.length} bản ghi chưa xử lý.`);
-  
-  const uniqueMap = {};
-  const uniqueRecords = [];
-  
-  for (const record of allData) {
-    if (record && record.personID) {
-      const key = record.checkinTime ? 
-        `${record.personID}_${record.checkinTime}` : 
-        `${record.personID}_notime_${Date.now()}`;
-        
-      if (!uniqueMap[key]) {
-        uniqueMap[key] = true;
-        uniqueRecords.push(record);
-      }
-    }
-  }
-  
-  uniqueRecords.sort((a, b) => {
-    const timeA = a.checkinTime ? parseInt(a.checkinTime, 10) : 0;
-    const timeB = b.checkinTime ? parseInt(b.checkinTime, 10) : 0;
-    return timeA - timeB;
-  });
-  
-  console.log(`Sau khi lọc trùng còn ${uniqueRecords.length} bản ghi duy nhất.`);
-  
-  console.log(`Gọi filterCheckinsByDay với ${uniqueRecords.length} bản ghi.`);
-  const result = filterCheckinsByDay(uniqueRecords);
-  
-  console.log(`Kết quả cuối cùng sau khi xử lý: ${result.length} bản ghi.`);
-  return result;
-}
 
-module.exports = {
-  getPeopleListByMethod,
-};
+  // Phân chia khoảng thời gian thành nhiều phân đoạn nhỏ hơn nếu cần thiết
+  const fetchAllSegments = async (placeId, dateFrom, dateTo, devices) => {
+    const segments = [];
+    const fromDate = new Date(parseInt(dateFrom, 10));
+    const toDate = new Date(parseInt(dateTo, 10));
+    const diffInHours = (toDate - fromDate) / (1000 * 60 * 60);
+    
+    if (diffInHours <= MAX_HOURS) {
+      // Nếu khoảng thời gian nhỏ hơn hoặc bằng MAX_HOURS, chỉ cần một lần truy vấn
+      console.log(`Khoảng thời gian nhỏ hơn hoặc bằng ${MAX_HOURS} giờ, thực hiện một lần truy vấn.`);
+      const data = await fetchSegment(dateFrom, dateTo, 0);
+      segments.push(...data);
+    } else {
+      // Chia nhỏ khoảng thời gian thành các phân đoạn
+      console.log(`Chia nhỏ khoảng thời gian thành các phân đoạn ${MAX_HOURS} giờ.`);
+      let currentStart = fromDate;
+      while (currentStart < toDate) {
+        const currentEnd = new Date(currentStart.getTime() + MAX_HOURS * 60 * 60 * 1000);
+        const segmentData = await fetchSegment(currentStart.getTime().toString(), currentEnd.getTime().toString());
+        segments.push(...segmentData);
+        currentStart = currentEnd;
+      }
+    }
+    
+    return segments;
+  };
+
+  // Gọi hàm fetchAllSegments để lấy dữ liệu
+  const allData = await fetchAllSegments(placeId, dateFrom, dateTo, devices);
+  
+  // Lọc và định dạng dữ liệu trước khi trả về
+  const filteredData = filterCheckinsByDay(allData);
+  
+  return filteredData;
+}
