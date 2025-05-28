@@ -234,125 +234,38 @@ const DebugPage = () => {
 };
 
 const CheckInApp = () => {
+  // State declarations
   const [formData, setFormData] = useState({
     placeId: "",
     deviceId: "",
     fromDateTime: "",
     toDateTime: "",
   });
+
   const [places, setPlaces] = useState([]);
   const [devices, setDevices] = useState([]);
   const [isPlacesLoading, setIsPlacesLoading] = useState(false);
   const [isDevicesLoading, setIsDevicesLoading] = useState(false);
   const [placeError, setPlaceError] = useState(null);
   const [deviceError, setDeviceError] = useState(null);
+  const [authStatus, setAuthStatus] = useState(null);
+  const [userInfo, setUserInfo] = useState(null);
+  const [accounts, setAccounts] = useState([]);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [resultsData, setResultsData] = useState(null);
   const [queryString, setQueryString] = useState(null);
-  const [authStatus, setAuthStatus] = useState(null);
-  const [userInfo, setUserInfo] = useState(null);
-  const [accounts, setAccounts] = useState([]);
-  const [showAccountMenu, setShowAccountMenu] = useState(false);
-  const accountMenuRef = useRef(null);
   const [oauthConfigs, setOauthConfigs] = useState([]);
   const [activeOauthConfig, setActiveOauthConfig] = useState('');
+  
+  const accountMenuRef = useRef(null);
 
-  // Kiểm tra trạng thái xác thực khi load component
   useEffect(() => {
-    console.log('=== KHỞI ĐỘNG ỨNG DỤNG - ĐANG KIỂM TRA THÔNG TIN ĐĂNG NHẬP ===');
-    
-    // In ra tất cả keys trong localStorage
-    console.log('Tất cả các keys trong localStorage:');
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      console.log(`- ${key}`);
-    }
-    
-    // Load OAuth configs
-    loadOAuthConfigs();
-    
-    // Load user info from localStorage
-    const savedUserInfo = localStorage.getItem('user_info');
-    console.log('Thông tin người dùng từ localStorage:', savedUserInfo);
-    
-    if (savedUserInfo) {
-      try {
-        const parsedUserInfo = JSON.parse(savedUserInfo);
-        console.log('Đã phân tích thông tin người dùng:', parsedUserInfo);
-        setUserInfo(parsedUserInfo);
-      } catch (error) {
-        console.error('Lỗi khi đọc thông tin người dùng:', error);
-      }
-    } else {
-      console.log('Không tìm thấy thông tin người dùng trong localStorage');
-    }
-    
-    // Lấy danh sách tài khoản trực tiếp từ localStorage
-    try {
-      // Thử đọc từ tất cả các key
-      const keys = [
-        'hanet_accounts_direct',
-        'hanet_accounts_v2',
-        'hanet_accounts'
-      ];
-      
-      let accountsLoaded = false;
-      
-      for (const key of keys) {
-        const rawData = localStorage.getItem(key);
-        console.log(`Kiểm tra key ${key}:`, rawData);
-        
-        if (rawData) {
-          try {
-            const parsedAccounts = JSON.parse(rawData);
-            console.log(`Dữ liệu tài khoản từ ${key}:`, parsedAccounts);
-            
-            if (Array.isArray(parsedAccounts) && parsedAccounts.length > 0) {
-              console.log(`Tải ${parsedAccounts.length} tài khoản từ ${key}`);
-              setAccounts(parsedAccounts);
-              accountsLoaded = true;
-              break;
-            }
-          } catch (parseError) {
-            console.error(`Lỗi khi phân tích dữ liệu từ ${key}:`, parseError);
-          }
-        }
-      }
-      
-      if (!accountsLoaded) {
-        console.log('Không tìm thấy tài khoản nào trong localStorage, tạo tài khoản từ user_info');
-        
-        // Nếu không tìm thấy danh sách tài khoản nhưng có user_info, tạo tài khoản từ user_info
-        if (savedUserInfo) {
-          const userInfo = JSON.parse(savedUserInfo);
-          if (userInfo && userInfo.username) {
-            const newAccount = {
-              id: userInfo.username,
-              userInfo: userInfo,
-              name: userInfo.name || userInfo.username,
-              createdAt: new Date().toISOString()
-            };
-            
-            const accounts = [newAccount];
-            setAccounts(accounts);
-            
-            // Lưu danh sách tài khoản mới
-            localStorage.setItem('hanet_accounts_direct', JSON.stringify(accounts));
-            localStorage.setItem('hanet_accounts', JSON.stringify(accounts));
-            localStorage.setItem('hanet_current_account_direct', newAccount.id);
-            localStorage.setItem('hanet_current_account_id', newAccount.id);
-            
-            console.log('Đã tạo tài khoản từ user_info:', newAccount);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Lỗi khi đọc danh sách tài khoản:', error);
-    }
-    
     checkAuthStatus();
+    loadOAuthConfigs();
+    loadUserInfo();
   }, []);
 
   // Đóng menu tài khoản khi click ra ngoài
@@ -658,10 +571,10 @@ const CheckInApp = () => {
     }
   };
 
+  // Load places
   const fetchPlaces = useCallback(async () => {
     setIsPlacesLoading(true);
     setPlaceError(null);
-    setPlaces([]);
     try {
       console.log('Fetching places...');
       const places = await apiService.getPlaces();
@@ -675,123 +588,98 @@ const CheckInApp = () => {
       }
     } catch (err) {
       console.error('Error fetching places:', err);
-      // Kiểm tra nếu lỗi liên quan đến xác thực
-      if (err.message && err.message.includes('xác thực')) {
-        setPlaceError(`Lỗi xác thực: ${err.message}. Vui lòng vào trang cấu hình API để đăng nhập lại.`);
-      } else {
-        setPlaceError(err.message || "Lỗi khi tải địa điểm.");
-      }
+      setPlaceError(err.message || "Lỗi khi tải địa điểm.");
       setPlaces([]);
     } finally {
       setIsPlacesLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (authStatus === 'authenticated') {
-      fetchPlaces();
-    }
-  }, [fetchPlaces, authStatus]);
-
+  // Device management
   const fetchDevices = useCallback(async (selectedPlaceId) => {
     if (!selectedPlaceId) {
       setDevices([]);
       setDeviceError(null);
       return;
     }
+    
     setIsDevicesLoading(true);
     setDeviceError(null);
-    setDevices([]);
     try {
-      // Sử dụng apiService để lấy danh sách thiết bị với tự động làm mới xác thực
-      const result = await apiService.getDevices(selectedPlaceId);
-      if (result.success && Array.isArray(result.data)) {
-        setDevices(result.data);
+      const deviceResponse = await apiService.getDevices(selectedPlaceId);
+      
+      if (deviceResponse.success && Array.isArray(deviceResponse.data)) {
+        const sortedDevices = [...deviceResponse.data].sort((a, b) => 
+          (a.deviceName || '').localeCompare(b.deviceName || '')
+        );
+        setDevices(sortedDevices);
       } else {
-        throw new Error("Dữ liệu thiết bị trả về không hợp lệ.");
+        throw new Error(deviceResponse.message || 'Dữ liệu thiết bị không hợp lệ');
       }
     } catch (err) {
-      // Kiểm tra nếu lỗi liên quan đến xác thực
-      if (err.message && err.message.includes('xác thực')) {
-        setDeviceError(`Lỗi xác thực: ${err.message}. Vui lòng vào trang cấu hình API để đăng nhập lại.`);
-      } else {
-        setDeviceError(err.message || "Lỗi khi tải thiết bị.");
-      }
+      console.error('Error fetching devices:', err);
+      setDeviceError(err.message);
       setDevices([]);
+      
+      if (err.message.includes('xác thực')) {
+        try {
+          const refreshed = await apiService.refreshAuthentication();
+          if (refreshed) {
+            const retryResponse = await apiService.getDevices(selectedPlaceId);
+            if (retryResponse.success && Array.isArray(retryResponse.data)) {
+              const sortedDevices = [...retryResponse.data].sort((a, b) => 
+                (a.deviceName || '').localeCompare(b.deviceName || '')
+              );
+              setDevices(sortedDevices);
+              setDeviceError(null);
+            }
+          }
+        } catch (refreshError) {
+          setDeviceError('Không thể làm mới xác thực: ' + refreshError.message);
+        }
+      }
     } finally {
       setIsDevicesLoading(false);
     }
   }, []);
 
+  // Load devices when place changes
   useEffect(() => {
-    fetchDevices(formData.placeId);
+    if (formData.placeId) {
+      fetchDevices(formData.placeId);
+    } else {
+      setDevices([]);
+      setDeviceError(null);
+    }
   }, [formData.placeId, fetchDevices]);
 
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-    setFormData((prevState) => ({
-      ...prevState,
-      [name]: value,
-    }));
-    setSubmitError(null);
-    setSuccessMessage(null);
-    setResultsData(null);
-  };
-
-  const handlePlaceChange = useCallback(async (e) => {
+  // Handle place selection
+  const handlePlaceChange = useCallback((e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value,
-      deviceId: "" // Reset device selection when place changes
+      deviceId: "" // Reset device selection
     }));
-
-    // Only fetch devices if a place is selected
+    
+    // Reset device-related states
+    setDevices([]);
+    setDeviceError(null);
+    
+    // Load devices if a place is selected
     if (value) {
-      setIsDevicesLoading(true);
-      setDeviceError(null);
-      setDevices([]);
-      
-      try {
-        console.log('Loading devices for place:', value);
-        const deviceResponse = await apiService.getDevices(value);
-        
-        if (deviceResponse.success) {
-          console.log(`Loaded ${deviceResponse.data.length} devices`);
-          setDevices(deviceResponse.data);
-        } else {
-          console.error('Error loading devices:', deviceResponse.message);
-          throw new Error(deviceResponse.message);
-        }
-      } catch (err) {
-        console.error('Error loading devices:', err);
-        setDeviceError(err.message || 'Lỗi khi tải danh sách thiết bị');
-        setDevices([]);
-      } finally {
-        setIsDevicesLoading(false);
-      }
-    } else {
-      // Reset devices when no place is selected
-      setDevices([]);
-      setDeviceError(null);
+      fetchDevices(value);
     }
+  }, [fetchDevices]);
+
+  // Handle device selection
+  const handleDeviceChange = useCallback((e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   }, []);
-
-  const getPlaceName = useCallback(
-    (id) => {
-      if (!id) return "Chưa chọn";
-      return places.find((p) => p.id.toString() === id)?.name || `ID: ${id}`;
-    },
-    [places]
-  );
-
-  const getDeviceName = useCallback(
-    (id) => {
-      if (!id) return "Chưa chọn / Tất cả";
-      return devices.find((d) => d.deviceID === id)?.deviceName || `ID: ${id}`;
-    },
-    [devices]
-  );
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -1097,12 +985,9 @@ const CheckInApp = () => {
     return createAccountFromOAuthConfig();
   };
 
-  // Phần hiển thị menu tài khoản
   const renderAccountMenu = () => {
     if (!showAccountMenu) return null;
-    
-    console.log('Hiển thị menu tài khoản, danh sách tài khoản:', accounts);
-    
+
     return (
       <div className="account-menu" ref={accountMenuRef}>
         <div className="account-menu-header">
@@ -1118,6 +1003,7 @@ const CheckInApp = () => {
             🔄
           </button>
         </div>
+        
         <div className="account-menu-list">
           {accounts && accounts.length > 0 ? (
             accounts.map((account) => (
@@ -1126,17 +1012,6 @@ const CheckInApp = () => {
                 className="account-item"
                 onClick={() => handleAccountSelect(account)}
               >
-                <div className="account-avatar">
-                  {account.userInfo && account.userInfo.avatar ? (
-                    <img src={account.userInfo.avatar} alt="Avatar" />
-                  ) : (
-                    <div className="default-avatar">
-                      {account.name ? account.name.charAt(0) : 
-                       account.userInfo && account.userInfo.name ? account.userInfo.name.charAt(0) : 
-                       account.id ? account.id.charAt(0).toUpperCase() : '?'}
-                    </div>
-                  )}
-                </div>
                 <div className="account-info">
                   <div className="account-name">
                     {account.name || 
@@ -1144,122 +1019,42 @@ const CheckInApp = () => {
                      (account.userInfo && account.userInfo.username) || 
                      account.id || 'Người dùng'}
                     
-                    {/* Hiển thị tên ứng dụng nếu có */}
                     {account.appName && (
                       <span className="app-name-badge">
                         {account.appName}
                       </span>
                     )}
                   </div>
-                  <div className="account-email">
-                    {account.email || 
-                     (account.userInfo && account.userInfo.email) || 
-                     ''}
-                  </div>
-                </div>
-                <div 
-                  className="account-delete"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (window.confirm('Bạn có chắc chắn muốn xóa tài khoản này?')) {
-                      handleDeleteAccount(account.id);
-                    }
-                  }}
-                >
-                  ×
                 </div>
               </div>
             ))
-           (
+          ) : (
             <div className="no-accounts">
-              Không có tài khoản nào
-              <div>
-                <button
-                  className="create-account-button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    tryCreateAccount();
-                  }}
-                >
-                  Tạo tài khoản mới
-                </button>
-              </div>
+              <p>Không có tài khoản nào</p>
+              <button
+                className="create-account-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  tryCreateAccount();
+                }}
+              >
+                Tạo tài khoản mới
+              </button>
             </div>
           )}
         </div>
-        {/* Display OAuth Configurations Section */}
-        {oauthConfigs.length > 0 && (
-          <div className="oauth-configs-section">
-            <h3 className="section-title">Cấu hình API đã lưu</h3>
-            <div className="oauth-configs-list">
-              {oauthConfigs.map(configName => (
-                <div 
-                  key={configName} 
-                  className={`oauth-config-item ${activeOauthConfig === configName ? 'active' : ''}`}
-                  onClick={() => handleOAuthConfigSelect(configName)}
-                >
-                  <div className="oauth-config-icon">
-                    <i className="fas fa-cog"></i>
-                  </div>
-                  <div className="oauth-config-name">
-                    {configName}
-                    {activeOauthConfig === configName && (
-                      <span className="active-badge">Đang dùng</span>
-                    )}
-                  </div>
-                  <div className="auth-status-indicator">
-                    {authStatus === 'authenticated' ? (
-                      <span className="status-authenticated">Đã xác thực</span>
-                    ) : authStatus === 'pending' ? (
-                      <span className="status-pending">Đang xác thực...</span>
-                    ) : (
-                      <>
-                        <span className="status-unauthenticated">Chưa xác thực</span>
-                        <button 
-                          className="refresh-auth-button" 
-                          onClick={() => {
-                            checkAuthStatus(true);
-                          }}
-                          style={{ marginLeft: '10px', fontSize: '0.8em', padding: '2px 8px' }}
-                        >
-                          Làm mới xác thực
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        
+
         <div className="account-menu-footer">
-          <div className="storage-info">
-            ID: {localStorage.getItem('hanet_current_account_direct') || 
-                 localStorage.getItem('hanet_current_account_id_v2') || 
-                 localStorage.getItem('hanet_current_account_id') || 
-                 'không xác định'}
-          </div>
           <div className="menu-actions">
-            <Link to="/debug" className="debug-link" onClick={() => setShowAccountMenu(false)}>
+            <Link to="/config" className="config-link">
+              Cấu hình API
+            </Link>
+            <Link to="/debug" className="debug-link">
               Debug
             </Link>
-            <button 
-              className="refresh-data-button"
-              onClick={(e) => {
-                e.stopPropagation();
-                window.location.reload();
-              }}
-            >
-              Làm mới dữ liệu
-            </button>
           </div>
           
-          {/* Thêm nút tạo tài khoản mới */}
           <div className="add-account-section">
-            <Link to="/config" className="add-account-button" onClick={() => setShowAccountMenu(false)}>
-              + Thêm tài khoản mới (Đăng nhập)
-            </Link>
             <button 
               className="create-manual-account-button"
               onClick={(e) => {
@@ -1274,177 +1069,36 @@ const CheckInApp = () => {
       </div>
     );
   };
-  
-  // Tạo tài khoản thủ công
-  const createManualAccount = () => {
-    try {
-      // Đóng menu
-      setShowAccountMenu(false);
-      
-      // Yêu cầu thông tin tài khoản
-      const accountName = prompt('Nhập tên tài khoản:');
-      if (!accountName) return;
-      
-      // Lấy tên ứng dụng từ cấu hình OAuth nếu có
-      let appName = '';
-      try {
-        // Lấy khóa cấu hình OAuth hiện tại
-        const currentOAuthConfigKey = localStorage.getItem('hanet_current_oauth_config_key') || 'hanet_oauth_config';
-        const oauthConfig = JSON.parse(localStorage.getItem(currentOAuthConfigKey) || '{}');
-        appName = oauthConfig.appName || '';
-      } catch (e) {
-        console.error('Không thể đọc cấu hình OAuth:', e);
-      }
-      
-      // Tạo ID tài khoản
-      let accountId = 'manual_user_' + Date.now();
-      if (appName) {
-        const appNameSlug = appName.toLowerCase().replace(/[^a-z0-9]/g, '_');
-        accountId = `manual_user_${appNameSlug}_${Date.now()}`;
-      }
-      
-      // Tạo khóa cấu hình OAuth cho tài khoản này
-      const oauthConfigKey = appName 
-        ? `hanet_oauth_config_${appName.toLowerCase().replace(/[^a-z0-9]/g, '_')}` 
-        : 'hanet_oauth_config';
-      
-      // Tạo tài khoản mới
-      const newAccount = {
-        id: accountId,
-        name: accountName,
-        appName: appName,
-        oauthConfigKey: oauthConfigKey,
-        createdAt: new Date().toISOString()
-      };
-      
-      // Lấy danh sách tài khoản hiện tại
-      let currentAccounts = [...accounts];
-      if (!Array.isArray(currentAccounts)) {
-        currentAccounts = [];
-      }
-      
-      // Thêm tài khoản mới
-      currentAccounts.push(newAccount);
-      
-      // Lưu danh sách tài khoản
-      const accountsJSON = JSON.stringify(currentAccounts);
-      localStorage.setItem('hanet_accounts_direct', accountsJSON);
-      localStorage.setItem('hanet_accounts_v2', accountsJSON);
-      localStorage.setItem('hanet_accounts', accountsJSON);
-      
-      // Cập nhật state
-      setAccounts(currentAccounts);
-      
-      // Hỏi người dùng có muốn chuyển sang tài khoản mới không
-      if (window.confirm(`Đã tạo tài khoản "${accountName}". Bạn có muốn chuyển sang tài khoản này không?`)) {
-        // Tạo thông tin người dùng đơn giản
-        const simpleUserInfo = {
-          username: accountId,
-          name: accountName
-        };
-        
-        // Lưu user_info
-        localStorage.setItem('user_info', JSON.stringify(simpleUserInfo));
-        
-        // Cập nhật ID tài khoản hiện tại
-        localStorage.setItem('hanet_current_account_direct', accountId);
-        localStorage.setItem('hanet_current_account_id_v2', accountId);
-        localStorage.setItem('hanet_current_account_id', accountId);
-        
-        // Lưu khóa cấu hình OAuth hiện tại
-        localStorage.setItem('hanet_current_oauth_config_key', oauthConfigKey);
-        
-        // Cập nhật state
-        setUserInfo(simpleUserInfo);
-        
-        // Làm mới trang
-        window.location.reload();
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Lỗi khi tạo tài khoản thủ công:', error);
-      alert('Không thể tạo tài khoản: ' + error.message);
-      return false;
-    }
-  };
 
-  // Render main application
   const renderMainApp = () => (
-    <main className="container">
+    <main className="app-container">
       <nav className="app-nav">
         <div className="user-info">
-          <span className="welcome-text">
-            {(() => {
-              // Hiển thị tên ứng dụng từ cấu hình OAuth hiện tại
-              try {
-                // Nếu có cấu hình OAuth active, hiển thị tên cấu hình đó
-                if (activeOauthConfig) {
-                  return activeOauthConfig;
-                }
-                
-                // Nếu không có cấu hình active, thử lấy từ tài khoản hiện tại
-                const currentAccount = accounts.find(acc => {
-                  const currentId = localStorage.getItem('hanet_current_account_direct') || 
-                                   localStorage.getItem('hanet_current_account_id_v2') || 
-                                   localStorage.getItem('hanet_current_account_id');
-                  return acc.id === currentId;
-                });
-                
-                if (currentAccount && currentAccount.appName) {
-                  return currentAccount.appName;
-                }
-                
-                // Nếu không có trong tài khoản, thử lấy từ cấu hình OAuth trực tiếp
-                const configKey = localStorage.getItem('hanet_current_oauth_config_key') || 'hanet_oauth_config';
-                const configData = localStorage.getItem(configKey);
-                if (configData) {
-                  const config = JSON.parse(configData);
-                  if (config && config.appName) {
-                    return config.appName;
-                  }
-                }
-                
-                // Mặc định
-                return "Hanet API";
-              } catch (e) {
-                console.error('Lỗi khi hiển thị tên ứng dụng:', e);
-                return "Hanet API";
-              }
-            })()} 
-          </span>
+          {userInfo ? (
+            <>
+              <button 
+                className="account-button" 
+                onClick={() => setShowAccountMenu(!showAccountMenu)}
+                ref={accountMenuRef}
+              >
+                <span>{userInfo.name || userInfo.username}</span>
+                <span className="dropdown-arrow">▼</span>
+              </button>
+              {showAccountMenu && renderAccountMenu()}
+            </>
+          ) : (
+            <span>Chưa đăng nhập</span>
+          )}
         </div>
-
-        <div className="account-section" ref={accountMenuRef}>
-          {/* Hiển thị thông tin người dùng hiện tại */}
-          <div className="current-account" onClick={() => {
-            // Khi mở menu, kiểm tra và tạo tài khoản nếu cần
-            console.log('Mở menu tài khoản');
-            
-            // Nếu không có tài khoản nào, thử tạo tài khoản
-            if (!accounts || accounts.length === 0) {
-              console.log('Chưa có tài khoản, thử tạo tài khoản');
-              tryCreateAccount();
-            }
-            
-            setShowAccountMenu(!showAccountMenu);
-          }}>
-            <span className="account-name">
-              {userInfo ? (userInfo.name || userInfo.username || 'Người dùng') : 'Người dùng'}
-            </span>
-            <span className="dropdown-icon">▼</span>
-          </div>
-          
-          {renderAccountMenu()}
-        </div>
-        
+        <Link to="/debug" className="debug-button">
+          Debug
+        </Link>
         <Link to="/config" className="config-button">
           Cấu hình API
         </Link>
       </nav>
-      
-      {/* --- Message khi chưa xác thực --- */}
-      {authStatus !== 'authenticated' && (
+
+      {authStatus !== 'authenticated' ? (
         <div className="auth-message">
           <h2>Yêu cầu xác thực</h2>
           <p>Bạn cần cấu hình và xác thực với Hanet API trước khi sử dụng ứng dụng.</p>
@@ -1452,232 +1106,141 @@ const CheckInApp = () => {
             Tiến hành cấu hình
           </Link>
         </div>
-      )}
-      
-      {/* --- Form --- */}
-      {authStatus === 'authenticated' && (
-        <>
-          <form onSubmit={handleSubmit} className="query-form">
-            <h2 className="form-title">Truy vấn Dữ liệu Check-in</h2>
-
-            {/* --- Dropdown PlaceId --- */}
-            <div className="form-group">
-              <label htmlFor="placeId" className="form-label required">
-                Địa điểm:
-              </label>
-              <select
-                id="placeId"
-                name="placeId"
-                value={formData.placeId}
-                onChange={handlePlaceChange}
-                className={isPlacesLoading ? "select-loading" : ""}
-                required
-                disabled={isPlacesLoading}
-              >
-                <option value="">
-                  {isPlacesLoading ? "Đang tải địa điểm..." : "-- Chọn địa điểm --"}
-                </option>
-                {Array.isArray(places) && places.map((place) => (
-                  <option key={place.id || place.placeID} value={place.id || place.placeID}>
-                    {place.name || place.placeName || "Unnamed"} (ID: {place.id || place.placeID})
-                  </option>
-                ))}
-              </select>
-              {placeError && <p className="error-message">{placeError}</p>}
-            </div>
-
-            {/* --- Dropdown DeviceId --- */}
-            <div className="form-group">
-              <label
-                htmlFor="deviceId"
-                className={
-                  !formData.placeId || isDevicesLoading
-                    ? "form-label disabled"
-                    : "form-label"
-                }
-              >
-                Thiết bị (Tùy chọn):
-              </label>
-              <select
-                id="deviceId"
-                name="deviceId"
-                value={formData.deviceId}
-                onChange={handleChange}
-                className={
-                  !formData.placeId || isDevicesLoading ? "select-disabled" : ""
-                }
-                disabled={!formData.placeId || isDevicesLoading}
-              >
-                <option value="">
-                  {!formData.placeId
-                    ? "-- Chọn địa điểm trước --"
-                    : isDevicesLoading
-                    ? "Đang tải thiết bị..."
-                    : devices.length === 0
-                    ? "-- Không có thiết bị --"
-                    : "-- Chọn thiết bị (để lọc) --"}
-                </option>
-                {/* Chỉ render options khi có devices */}
-                {devices.map((device) => (
-                  <option key={device.deviceID} value={device.deviceID}>
-                    {device.deviceName} (ID: {device.deviceID})
-                  </option>
-                ))}
-              </select>
-              {deviceError && <p className="error-message">{deviceError}</p>}
-            </div>
-
-            {/* --- Khu vực chọn thời gian --- */}
-            <div className="time-range-container">
-              <p className="section-title">Khoảng thời gian</p>
-              <div className="time-range-grid">
-                {/* Input From */}
-                <div className="form-group">
-                  <label htmlFor="fromDateTime" className="form-label required">
-                    Từ:
-                  </label>
-                  <input
-                    type="datetime-local"
-                    id="fromDateTime"
-                    name="fromDateTime"
-                    value={formData.fromDateTime}
-                    onChange={handleChange}
-                  />
-                </div>
-                {/* Input To */}
-                <div className="form-group">
-                  <label htmlFor="toDateTime" className="form-label required">
-                    Đến:
-                  </label>
-                  <input
-                    type="datetime-local"
-                    id="toDateTime"
-                    name="toDateTime"
-                    value={formData.toDateTime}
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* --- Input Tóm tắt --- */}
-            <div className="form-group">
-              <label htmlFor="summaryInput" className="form-label-sm">
-                Thông tin truy vấn:
-              </label>
-              <input
-                type="text"
-                id="summaryInput"
-                readOnly
-                value={`${process.env.REACT_APP_API_URL}/api/checkins?${queryString || ""}`}
-                className="summary-input"
-              />
-            </div>
-
-            {/* --- Thông báo Lỗi/Thành công Submit --- */}
-            {submitError && (
-              <div className="alert-error" role="alert">
-                <span className="alert-label">Lỗi: </span>
-                {submitError}
-              </div>
-            )}
-            {successMessage && resultsData === null && (
-              <div className="alert-info" role="status">
-                <span>{successMessage}</span>
-              </div>
-            )}
-
-            {/* --- Nút Submit --- */}
-            <button
-              type="submit"
-              className={
-                isSubmitting || isPlacesLoading
-                  ? "submit-btn disabled"
-                  : "submit-btn"
-              }
-              disabled={isSubmitting || isPlacesLoading}
+      ) : (
+        <form onSubmit={handleSubmit} className="query-form">
+          {/* Place selection */}
+          <div className="form-group">
+            <label htmlFor="placeId" className="form-label required">
+              Địa điểm:
+            </label>
+            <select
+              id="placeId"
+              name="placeId"
+              value={formData.placeId}
+              onChange={handlePlaceChange}
+              className={isPlacesLoading ? "select-loading" : ""}
+              required
+              disabled={isPlacesLoading}
             >
-              {isSubmitting ? "Đang tìm kiếm..." : "Tìm kiếm Check-in"}
-            </button>
-          </form>
+              <option value="">
+                {isPlacesLoading ? "Đang tải địa điểm..." : "-- Chọn địa điểm --"}
+              </option>
+              {places.map((place) => (
+                <option key={place.id || place.placeID} value={place.id || place.placeID}>
+                  {place.name || place.placeName || "Unnamed"} (ID: {place.id || place.placeID})
+                </option>
+              ))}
+            </select>
+            {placeError && <p className="error-message">{placeError}</p>}
+          </div>
 
-          {resultsData !== null && (
-            <div className="results-container">
-              <h3 className="results-title">
-                Kết quả truy vấn ({resultsData.length})
-              </h3>
-              {resultsData.length > 0 ? (
-                <div className="table-container">
-                  <table className="results-table">
-                    <thead>
-                      <tr>
-                        <th>Tên</th>
-                        <th>PersonID</th>
-                        <th>PlaceId</th>
-                        <th>AliasID</th>
-                        <th>Chức vụ</th>
-                        <th>Thời gian Checkin</th>
-                        <th>Thời gian Checkout</th>
-                        <th>Thời gian làm việc</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {resultsData.map((result, index) => {
-                        // Tính thời gian làm việc
-                        let workingTime = '';
-                        if (result.workingTime) {
-                          // Sử dụng giá trị từ API nếu có
-                          workingTime = result.workingTime;
-                        } else if (result.checkinTime && result.checkoutTime) {
-                          // Tính toán nếu không có giá trị từ API
-                          const duration = (result.checkoutTime - result.checkinTime) / (1000 * 60); // Convert to minutes
-                          const hours = Math.floor(duration / 60);
-                          const minutes = Math.floor(duration % 60);
-                          workingTime = `${hours}h ${minutes}m`;
-                        }
+          {/* Device selection */}
+          <div className="form-group">
+            <label htmlFor="deviceId" className="form-label">
+              Thiết bị (Tùy chọn):
+            </label>
+            <select
+              id="deviceId"
+              name="deviceId"
+              value={formData.deviceId}
+              onChange={handleDeviceChange}
+              disabled={!formData.placeId || isDevicesLoading}
+              className={!formData.placeId || isDevicesLoading ? "select-disabled" : ""}
+            >
+              <option value="">
+                {!formData.placeId
+                  ? "-- Chọn địa điểm trước --"
+                  : isDevicesLoading
+                  ? "Đang tải thiết bị..."
+                  : "-- Chọn thiết bị (để lọc) --"}
+              </option>
+              {devices.map((device) => (
+                <option key={device.deviceID} value={device.deviceID}>
+                  {device.deviceName} (ID: {device.deviceID})
+                </option>
+              ))}
+            </select>
+            {deviceError && <p className="error-message">{deviceError}</p>}
+          </div>
 
-                        return (
-                          <tr key={result.personID + "_" + index}>
-                            <td>{result.personName || "(Không tên)"}</td>
-                            <td className="monospace">{result.personID}</td>
-                            <td>{result.placeID || "(Không tên)"}</td>
-                            <td>{result.aliasID || "N/A"}</td>
-                            <td>{result.title || "N/A"}</td>
-                            <td>
-                              {result.formattedCheckinTime || 
-                               (result.checkinTime ? new Date(result.checkinTime).toLocaleString("vi-VN") : "N/A")}
-                            </td>
-                            <td>
-                              {result.formattedCheckoutTime || 
-                               (result.checkoutTime ? new Date(result.checkoutTime).toLocaleString("vi-VN") : "N/A")}
-                            </td>
-                            <td>{workingTime || "N/A"}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="no-results">{successMessage}</p>
-              )}
-              {/* Textarea hiển thị JSON thô */}
-              <div className="json-container">
-                <h4 className="json-title">Dữ liệu API trả về (JSON thô)</h4>
-                <textarea
-                  readOnly
-                  rows={15}
-                  className="json-display"
-                  value={JSON.stringify(resultsData, null, 2)}
+          {/* --- Khu vực chọn thời gian --- */}
+          <div className="time-range-container">
+            <p className="section-title">Khoảng thời gian</p>
+            <div className="time-range-grid">
+              {/* Input From */}
+              <div className="form-group">
+                <label htmlFor="fromDateTime" className="form-label required">
+                  Từ:
+                </label>
+                <input
+                  type="datetime-local"
+                  id="fromDateTime"
+                  name="fromDateTime"
+                  value={formData.fromDateTime}
+                  onChange={handleChange}
+                />
+              </div>
+              {/* Input To */}
+              <div className="form-group">
+                <label htmlFor="toDateTime" className="form-label required">
+                  Đến:
+                </label>
+                <input
+                  type="datetime-local"
+                  id="toDateTime"
+                  name="toDateTime"
+                  value={formData.toDateTime}
+                  onChange={handleChange}
                 />
               </div>
             </div>
+          </div>
+
+          {/* --- Input Tóm tắt --- */}
+          <div className="form-group">
+            <label htmlFor="summaryInput" className="form-label-sm">
+              Thông tin truy vấn:
+            </label>
+            <input
+              type="text"
+              id="summaryInput"
+              readOnly
+              value={`${process.env.REACT_APP_API_URL}/api/checkins?${queryString || ""}`}
+              className="summary-input"
+            />
+          </div>
+
+          {/* --- Thông báo Lỗi/Thành công Submit --- */}
+          {submitError && (
+            <div className="alert-error" role="alert">
+              <span className="alert-label">Lỗi: </span>
+              {submitError}
+            </div>
           )}
-        </>
+          {successMessage && resultsData === null && (
+            <div className="alert-info" role="status">
+              <span>{successMessage}</span>
+            </div>
+          )}
+
+          {/* --- Nút Submit --- */}
+          <button
+            type="submit"
+            className={
+              isSubmitting || isPlacesLoading
+                ? "submit-btn disabled"
+                : "submit-btn"
+            }
+            disabled={isSubmitting || isPlacesLoading}
+          >
+            {isSubmitting ? "Đang tìm kiếm..." : "Tìm kiếm Check-in"}
+          </button>
+        </form>
       )}
     </main>
   );
 
+  // Render the whole app
   return (
     <BrowserRouter>
       <Routes>
@@ -1689,6 +1252,6 @@ const CheckInApp = () => {
       </Routes>
     </BrowserRouter>
   );
-};
+}
 
 export default CheckInApp;
