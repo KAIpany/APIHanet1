@@ -247,28 +247,29 @@ textarea:focus {
   margin-bottom: 1.5rem;
 }
 
-.results-table {
-  min-width: 100%;
-  background-color: white;
-  border-collapse: collapse;
-  border: 1px solid #e5e5e5;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+.results-section {
+  margin-top: 24px;
+  margin-left: 0;
+  text-align: left;
+  width: 100%;
+  max-width: 100%;
+  /* Đảm bảo không bị lệch so với form */
 }
 
-.results-table th,
-.results-table td {
-  padding: 0.5rem 1rem;
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+.results-table th, .results-table td {
+  border: 1px solid #ddd;
+  padding: 6px 10px;
   text-align: left;
 }
 
 .results-table th {
-  background-color: #f3f4f6;
-  color: #6b7280;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  background: #f5f5f5;
 }
 
 .results-table tbody tr {
