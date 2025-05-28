@@ -185,28 +185,39 @@ async function handleHanetResponse(response) {
 
 // Hàm xử lý một phân đoạn
 async function processSegment(placeId, fromTime, toTime, deviceId, accessToken, attempt = 0) {
+  const MAX_RETRIES = 3;
+  const BASE_DELAY = 5000;
+  const MAX_DELAY = 30000;
+
   if (attempt >= MAX_RETRIES) {
     throw new Error(`Đã thử ${MAX_RETRIES} lần nhưng không thành công`);
   }
 
-  const url = `${process.env.HANET_API_URL}/person/getCheckinByPlaceIdInTimestamp`;
-  const formData = new URLSearchParams({
-    token: accessToken,
-    placeID: placeId,
-    from: fromTime.toString(),
-    to: toTime.toString(),
-    size: 200 // Giới hạn kích thước mỗi request
-  });
-  
-  if (deviceId) {
-    formData.append('devices', deviceId);
+  const delay = Math.min(BASE_DELAY * Math.pow(2, attempt), MAX_DELAY);
+  if (attempt > 0) {
+    console.log(`Chờ ${delay}ms trước khi thử lại lần ${attempt + 1}`);
+    await new Promise(resolve => setTimeout(resolve, delay));
   }
 
   try {
-    console.log(`Đang gọi Hanet API (lần ${attempt + 1}/${MAX_RETRIES}):`, {
+    const url = `${process.env.HANET_API_URL}/person/getCheckinByPlaceIdInTimestamp`;
+    const formData = new URLSearchParams({
+      token: accessToken,
+      placeID: placeId,
+      from: fromTime.toString(),
+      to: toTime.toString(),
+      size: 200 // Giới hạn kích thước mỗi request
+    });
+
+    if (deviceId) {
+      formData.append('devices', deviceId);
+    }
+
+    console.log('Gọi Hanet API với params:', {
       placeId,
       from: new Date(parseInt(fromTime)).toLocaleString(),
-      to: new Date(parseInt(toTime)).toLocaleString()
+      to: new Date(parseInt(toTime)).toLocaleString(),
+      attempt: attempt + 1
     });
 
     const response = await fetch(url, {
@@ -215,21 +226,44 @@ async function processSegment(placeId, fromTime, toTime, deviceId, accessToken, 
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: formData.toString(),
-      timeout: calculateBackoff(attempt)
+      timeout: 30000
     });
 
-    const data = await handleHanetResponse(response);
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `Hanet API error: ${response.status}`;
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage += ` - ${errorData.message || errorData.error || errorText}`;
+      } catch {
+        errorMessage += ` - ${errorText}`;
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+    
+    if (!data || typeof data.returnCode === 'undefined') {
+      throw new Error('Invalid response format from Hanet API');
+    }
+
+    if (data.returnCode !== 1 && data.returnCode !== 0) {
+      throw new Error(`Hanet API error: ${data.returnMessage || 'Unknown error'}`);
+    }
+
     return data.data || [];
   } catch (error) {
-    console.error(`Lỗi khi xử lý phân đoạn (lần ${attempt + 1}):`, error);
+    console.error(`Lỗi trong lần thử ${attempt + 1}:`, error);
     
-    // Nếu là lỗi xác thực, throw ngay
-    if (error.message.includes('authentication') || error.message.includes('401')) {
+    // Nếu là lỗi xác thực, không thử lại
+    if (error.message.includes('authentication') || 
+        error.message.includes('401')) {
       throw error;
     }
     
-    // Đợi trước khi thử lại
-    await sleep(RETRY_DELAY);
+    // Thử lại cho các lỗi khác
     return processSegment(placeId, fromTime, toTime, deviceId, accessToken, attempt + 1);
   }
 }
