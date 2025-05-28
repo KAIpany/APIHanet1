@@ -121,13 +121,41 @@ app.get("/api/device", async (req, res, next) => {
     if (!placeId) {
       return res.status(400).json({
         success: false,
-        message: "Thiếu tham số bắt buộc: placeId",
+        message: "Thiếu tham số bắt buộc: placeId"
       });
     }
 
+    console.log(`[${req.id}] Fetching devices for placeId: ${placeId}`);
+    
     const deviceData = await getDeviceById.getDeviceById(placeId);
-    res.status(200).json({ success: true, data: deviceData });
+    
+    // Validate device data
+    if (!deviceData) {
+      console.log(`[${req.id}] No devices found for placeId: ${placeId}`);
+      return res.status(200).json({
+        success: true,
+        data: []
+      });
+    }
+
+    // Ensure deviceData is an array
+    const devices = Array.isArray(deviceData) ? deviceData : [deviceData];
+    
+    // Format device data
+    const formattedDevices = devices.map(device => ({
+      deviceID: device.deviceID || device.id,
+      deviceName: device.deviceName || device.name || `Device ${device.deviceID || device.id}`,
+      placeID: device.placeID || placeId
+    })).filter(device => device.deviceID); // Filter out devices without ID
+
+    console.log(`[${req.id}] Returning ${formattedDevices.length} devices`);
+
+    res.status(200).json({
+      success: true,
+      data: formattedDevices
+    });
   } catch (error) {
+    console.error(`[${req.id}] Error fetching devices:`, error);
     next(error);
   }
 });
