@@ -206,7 +206,7 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
         
         const config = {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          timeout: 30000, // Tăng timeout lên 30 giây
+          timeout: 60000, // Tăng timeout lên 30 giây
         };
         
         const response = await axios.post(url, qs.stringify(data), config);
