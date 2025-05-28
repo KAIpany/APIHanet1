@@ -43,17 +43,14 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
 
     console.log(`Split into ${segments.length} segments (Hanet API calls)`);
 
-    // Process each segment
+    let hanetApiCallCount = 0; // Đếm số lần gọi Hanet API
     const allResults = new Map();
     const failedSegments = [];
-    let hanetApiCallCount = 0; // Đếm số lần gọi Hanet API
 
-    for (let i = 0; i < segments.length; i++) {
-      const segment = segments[i];
+    // Hàm gọi API cho 1 segment
+    async function fetchSegment(segment) {
       try {
-        console.log(`Processing segment ${i + 1}/${segments.length}`);
         hanetApiCallCount++;
-        
         const url = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
         const formData = new URLSearchParams({
           token: accessToken,
@@ -62,109 +59,36 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
           to: segment.end.toString(),
           size: 200
         });
-
         if (devices) {
           formData.append('devices', devices);
         }
-
-        console.log(`Calling API: ${url} with placeId=${placeId}`);
         const response = await fetch(url, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: formData.toString(),
         });
-
         if (!response.ok) {
           throw new Error(`API error: ${response.status}`);
         }
-
         const result = await response.json();
         if (result.returnCode !== 1 && result.returnCode !== 0) {
           throw new Error(result.returnMessage || 'Unknown API error');
         }
-
-        const data = result.data || [];
-        
-        // Filter and process records
-        data.forEach(record => {
-          if (record && record.personID) {
-            const key = `${record.date || new Date(parseInt(record.checkinTime)).toISOString().split('T')[0]}_${record.personID}`;
-            if (!allResults.has(key)) {
-              allResults.set(key, {
-                records: [],
-                personInfo: {
-                  personName: record.personName || "",
-                  personID: record.personID,
-                  aliasID: record.aliasID || "",
-                  placeID: record.placeID || null,
-                  title: record.title ? (typeof record.title === "string" ? record.title.trim() : "N/A") : "Customer",
-                  date: record.date || new Date(parseInt(record.checkinTime)).toISOString().split('T')[0],
-                }
-              });
-            }
-            allResults.get(key).records.push({
-              time: record.checkinTime,
-              formattedTime: formatTimestamp(record.checkinTime)
-            });
-          }
-        });
-
-        // Wait between requests
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        return result.data || [];
       } catch (error) {
-        console.error(`Error processing segment ${i + 1}:`, error);
-        failedSegments.push({ ...segment, retryCount: 0 });
+        segment.error = error;
+        return segment; // Trả về segment lỗi để retry
       }
     }
 
-    // Retry failed segments
-    while (failedSegments.length > 0) {
-      const segment = failedSegments.shift();
-      if (segment.retryCount >= MAX_RETRIES) {
-        console.error(`Failed to process segment after ${MAX_RETRIES} retries`);
-        continue;
-      }
+    // Gọi song song các segment
+    const segmentResults = await Promise.all(segments.map(fetchSegment));
 
-      try {
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        hanetApiCallCount++;
-        
-        const url = `${HANET_API_BASE_URL}/person/getCheckinByPlaceIdInTimestamp`;
-        const formData = new URLSearchParams({
-          token: accessToken,
-          placeID: placeId,
-          from: segment.start.toString(),
-          to: segment.end.toString(),
-          size: 200
-        });
-
-        if (devices) {
-          formData.append('devices', devices);
-        }
-
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: formData.toString(),
-        });
-
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
-
-        const result = await response.json();
-        if (result.returnCode !== 1 && result.returnCode !== 0) {
-          throw new Error(result.returnMessage || 'Unknown API error');
-        }
-
-        const data = result.data || [];
-        
-        // Process retry data
-        data.forEach(record => {
+    // Gom kết quả và xác định segment lỗi
+    segmentResults.forEach((dataOrSegment, idx) => {
+      if (Array.isArray(dataOrSegment)) {
+        // Thành công, xử lý dữ liệu
+        dataOrSegment.forEach(record => {
           if (record && record.personID) {
             const key = `${record.date || new Date(parseInt(record.checkinTime)).toISOString().split('T')[0]}_${record.personID}`;
             if (!allResults.has(key)) {
@@ -186,13 +110,52 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
             });
           }
         });
-      } catch (error) {
-        console.error(`Retry ${segment.retryCount + 1} failed:`, error);
-        segment.retryCount++;
-        if (segment.retryCount < MAX_RETRIES) {
-          failedSegments.push(segment);
-        }
+      } else {
+        // Lỗi, thêm vào danh sách retry
+        dataOrSegment.retryCount = 1;
+        failedSegments.push(dataOrSegment);
       }
+    });
+
+    // Retry các segment lỗi (song song, tối đa MAX_RETRIES)
+    for (let retry = 1; retry <= MAX_RETRIES && failedSegments.length > 0; retry++) {
+      console.log(`Retry round ${retry} for ${failedSegments.length} failed segments`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      const retryResults = await Promise.all(failedSegments.map(fetchSegment));
+      failedSegments.length = 0; // clear
+      retryResults.forEach((dataOrSegment) => {
+        if (Array.isArray(dataOrSegment)) {
+          // Thành công, xử lý dữ liệu
+          dataOrSegment.forEach(record => {
+            if (record && record.personID) {
+              const key = `${record.date || new Date(parseInt(record.checkinTime)).toISOString().split('T')[0]}_${record.personID}`;
+              if (!allResults.has(key)) {
+                allResults.set(key, {
+                  records: [],
+                  personInfo: {
+                    personName: record.personName || "",
+                    personID: record.personID,
+                    aliasID: record.aliasID || "",
+                    placeID: record.placeID || null,
+                    title: record.title ? (typeof record.title === "string" ? record.title.trim() : "N/A") : "Customer",
+                    date: record.date || new Date(parseInt(record.checkinTime)).toISOString().split('T')[0],
+                  }
+                });
+              }
+              allResults.get(key).records.push({
+                time: record.checkinTime,
+                formattedTime: formatTimestamp(record.checkinTime)
+              });
+            }
+          });
+        } else {
+          // Lỗi, tăng retryCount
+          dataOrSegment.retryCount = (dataOrSegment.retryCount || 1) + 1;
+          if (dataOrSegment.retryCount <= MAX_RETRIES) {
+            failedSegments.push(dataOrSegment);
+          }
+        }
+      });
     }
 
     // Sau khi hoàn thành, log tổng số lần gọi Hanet API
@@ -203,17 +166,14 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
     for (const [_, group] of allResults) {
       // Sort records by time
       group.records.sort((a, b) => parseInt(a.time) - parseInt(b.time));
-      
       // Get first check-in and last check-out
       const checkinRecord = group.records[0];
       const checkoutRecord = group.records[group.records.length - 1];
-      
       // Calculate working time
       let workingTime = "N/A";
       if (checkinRecord && checkoutRecord) {
         const checkinTime = parseInt(checkinRecord.time);
         const checkoutTime = parseInt(checkoutRecord.time);
-        
         if (checkinTime === checkoutTime) {
           workingTime = "0h 0m";
         } else {
@@ -223,7 +183,6 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
           workingTime = `${hours}h ${minutes}m`;
         }
       }
-      
       results.push({
         ...group.personInfo,
         checkinTime: checkinRecord ? checkinRecord.time : null,
@@ -234,7 +193,6 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
         totalRecords: group.records.length
       });
     }
-
     // Sort results by date and check-in time
     results.sort((a, b) => {
       if (a.date !== b.date) {
@@ -242,7 +200,6 @@ async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
       }
       return parseInt(a.checkinTime) - parseInt(b.checkinTime);
     });
-
     console.log(`Final results: ${results.length} records processed.`);
     return results;
   } catch (error) {
