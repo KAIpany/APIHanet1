@@ -354,3 +354,122 @@ async function getCheckinsByPlaceIdInTimestamp(placeId, fromTime, toTime, device
   // Xử lý request đơn lẻ
   return await processSegment(placeId, fromTime, toTime, deviceId, accessToken);
 }
+
+const MAX_SEGMENT_SIZE = 6 * 60 * 60 * 1000; // 6 giờ mỗi phân đoạn
+
+async function getPeopleListByMethod(placeId, dateFrom, dateTo, devices) {
+  try {
+    console.log('getPeopleListByMethod called with:', {
+      placeId,
+      dateFrom: new Date(parseInt(dateFrom)).toLocaleString(),
+      dateTo: new Date(parseInt(dateTo)).toLocaleString(),
+      devices
+    });
+
+    // Kiểm tra và lấy token
+    const accessToken = await tokenManager.getValidHanetToken();
+    if (!accessToken) {
+      throw new Error('Không lấy được access token hợp lệ');
+    }
+
+    // Chia thành các phân đoạn nhỏ hơn
+    const segments = [];
+    let startTime = parseInt(dateFrom);
+    const endTime = parseInt(dateTo);
+
+    while (startTime < endTime) {
+      segments.push({
+        start: startTime,
+        end: Math.min(startTime + MAX_SEGMENT_SIZE, endTime)
+      });
+      startTime += MAX_SEGMENT_SIZE;
+    }
+
+    console.log(`Đã chia thành ${segments.length} phân đoạn`);
+
+    // Xử lý từng phân đoạn
+    const allResults = [];
+    const failedSegments = [];
+
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      try {
+        console.log(`Đang xử lý phân đoạn ${i + 1}/${segments.length}`);
+        
+        const url = `${process.env.HANET_API_URL}/person/getCheckinByPlaceIdInTimestamp`;
+        const formData = new URLSearchParams({
+          token: accessToken,
+          placeID: placeId,
+          from: segment.start.toString(),
+          to: segment.end.toString(),
+          size: 200
+        });
+
+        if (devices) {
+          formData.append('devices', devices);
+        }
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: formData.toString(),
+          timeout: 30000
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (!result || typeof result.returnCode === 'undefined') {
+          throw new Error('Invalid response format from Hanet API');
+        }
+
+        if (result.returnCode !== 1 && result.returnCode !== 0) {
+          throw new Error(`Hanet API error: ${result.returnMessage || 'Unknown error'}`);
+        }
+
+        const segmentData = result.data || [];
+        allResults.push(...segmentData);
+
+        // Đợi 1 giây giữa các request
+        if (i < segments.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+      } catch (error) {
+        console.error(`Lỗi khi xử lý phân đoạn ${i + 1}:`, error);
+        failedSegments.push({ segment, error: error.message });
+        
+        // Đợi lâu hơn nếu gặp lỗi
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    }
+
+    // Log kết quả
+    console.log('Kết quả xử lý:', {
+      totalSegments: segments.length,
+      successfulSegments: segments.length - failedSegments.length,
+      failedSegments: failedSegments.length,
+      totalRecords: allResults.length
+    });
+
+    if (failedSegments.length > 0) {
+      console.warn('Failed segments:', failedSegments);
+    }
+
+    // Nếu không có kết quả và có lỗi
+    if (allResults.length === 0 && failedSegments.length > 0) {
+      throw new Error(`Không thể lấy dữ liệu từ Hanet API: ${failedSegments[0].error}`);
+    }
+
+    return allResults;
+
+  } catch (error) {
+    console.error('getPeopleListByMethod error:', error);
+    throw error;
+  }
+}
