@@ -266,6 +266,7 @@ const CheckInApp = () => {
     checkAuthStatus();
     loadOAuthConfigs();
     loadUserInfo();
+    fetchPlaces();
   }, []);
 
   // Đóng menu tài khoản khi click ra ngoài
