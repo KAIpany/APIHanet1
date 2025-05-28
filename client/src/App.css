@@ -247,16 +247,31 @@ textarea:focus {
   margin-bottom: 1.5rem;
 }
 
-.results-section {
-  margin-top: 24px;
-  margin-left: 0;
-  text-align: left;
+.checkin-results-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 32px;
   width: 100%;
-  max-width: 100%;
-  /* Đảm bảo không bị lệch so với form */
+}
+
+.results-section {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  margin-top: 0;
+  text-align: center;
+}
+
+.results-section h3 {
+  text-align: center;
 }
 
 .results-table {
+  margin-left: auto;
+  margin-right: auto;
+  text-align: left;
   width: 100%;
   border-collapse: collapse;
   margin-top: 8px;
