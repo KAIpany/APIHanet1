@@ -410,6 +410,29 @@ const handleApiError = (err, req, res, next) => {
 
 app.use(handleApiError);
 
+// Middleware xử lý lỗi chung
+app.use((err, req, res, next) => {
+  console.error('Error:', {
+    message: err.message,
+    stack: err.stack,
+    url: req.originalUrl,
+    method: req.method,
+    query: req.query
+  });
+
+  if (err.code === 'ETIMEDOUT' || err.code === 'ESOCKETTIMEDOUT') {
+    return res.status(504).json({
+      success: false,
+      message: 'Request timeout. Vui lòng thử lại với khoảng thời gian ngắn hơn.'
+    });
+  }
+
+  res.status(500).json({
+    success: false,
+    message: 'Lỗi máy chủ nội bộ. ' + (process.env.NODE_ENV === 'development' ? err.message : '')
+  });
+});
+
 if (process.env.PORT !== "production") {
   app.listen(PORT, () => {
     console.log(`Server đang lắng nghe trên cổng ${PORT}`);
