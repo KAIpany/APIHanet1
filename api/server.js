@@ -33,6 +33,38 @@ app.use((req, res, next) => {
 app.use(cors());
 app.use(express.json());
 
+// API endpoint for OAuth status check
+app.get("/api/oauth/status", async (req, res) => {
+  try {
+    const token = await tokenManager.getValidHanetToken();
+    
+    if (token) {
+      res.json({
+        success: true,
+        data: {
+          status: "authenticated",
+          message: "Access token is valid"
+        }
+      });
+    } else {
+      res.json({
+        success: true,
+        data: {
+          status: "unauthenticated",
+          message: "No valid access token"
+        }
+      });
+    }
+  } catch (error) {
+    console.error("Error checking OAuth status:", error);
+    res.status(500).json({
+      success: false,
+      error: "Internal server error",
+      message: error.message
+    });
+  }
+});
+
 // API endpoint để lấy danh sách địa điểm
 app.get("/api/places", async (req, res) => {
   try {
