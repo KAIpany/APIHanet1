@@ -79,15 +79,21 @@ const refreshAuthentication = async () => {
       // Đặt cấu hình này là mặc định (khả năng tương thích)
       localStorage.setItem('hanet_oauth_config', JSON.stringify(parsedConfig));
       
-      // Gửi cấu hình lên server để làm mới
-      console.log('[apiService] Gửi cấu hình lên server để làm mới xác thực:', parsedConfig.appName || activeConfig);
+      // Lấy refreshToken nếu có
+      const refreshToken = parsedConfig.token?.refresh_token || parsedConfig.refreshToken || '';
+      // Gửi cấu hình lên server để làm mới xác thực, bao gồm refreshToken
+      const configToSend = {
+        ...parsedConfig,
+        refreshToken
+      };
+      console.log('[apiService] Gửi cấu hình lên server để làm mới xác thực:', configToSend.appName || activeConfig);
       
       const response = await fetch(`${API_URL}/api/oauth/config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(parsedConfig)
+        body: JSON.stringify(configToSend)
       });
       
       const result = await response.json();
