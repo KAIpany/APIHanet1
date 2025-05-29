@@ -1,95 +1,99 @@
 // tokenManager.js
+require("dotenv").config();
 const axios = require("axios");
 const qs = require("qs");
-const {
-  HANET_TOKEN_URL,
-  HANET_CLIENT_ID,
-  HANET_CLIENT_SECRET,
-  HANET_REFRESH_TOKEN,
-} = process.env;
+
 let currentAccessToken = null;
 let tokenExpiresAt = null;
-async function refreshAccessToken() {
-  console.log("Đang yêu cầu làm mới Access Token từ HANET...");
-  if (
-    !HANET_REFRESH_TOKEN ||
-    !HANET_CLIENT_ID ||
-    !HANET_CLIENT_SECRET ||
-    !HANET_TOKEN_URL
-  ) {
-    throw new Error(
-      "Thiếu thông tin cấu hình để làm mới token (kiểm tra .env)"
-    );
+
+// Kiểm tra và log biến môi trường khi khởi động
+const checkEnvironmentVariables = () => {
+  const requiredVars = {
+    HANET_TOKEN_URL: process.env.HANET_TOKEN_URL,
+    HANET_CLIENT_ID: process.env.HANET_CLIENT_ID,
+    HANET_CLIENT_SECRET: process.env.HANET_CLIENT_SECRET,
+    HANET_REFRESH_TOKEN: process.env.HANET_REFRESH_TOKEN
+  };
+
+  const missingVars = Object.entries(requiredVars)
+    .filter(([key, value]) => !value)
+    .map(([key]) => key);
+
+  if (missingVars.length > 0) {
+    console.error('[tokenManager] Thiếu các biến môi trường:', missingVars.join(', '));
+    return false;
   }
 
-  const apiUrl = HANET_TOKEN_URL;
-  const requestData = {
-    grant_type: "refresh_token",
-    client_id: HANET_CLIENT_ID,
-    client_secret: HANET_CLIENT_SECRET,
-    refresh_token: HANET_REFRESH_TOKEN,
-  };
-  const config = {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    timeout: 10000,
-  };
+  console.log('[tokenManager] Đã tải đầy đủ cấu hình môi trường');
+  return true;
+}
+
+async function refreshAccessToken() {
+  console.log('[tokenManager] Bắt đầu làm mới Access Token...');
+
+  if (!checkEnvironmentVariables()) {
+    throw new Error("Thiếu thông tin cấu hình để làm mới token (kiểm tra .env)");
+  }
+
+  const {
+    HANET_TOKEN_URL,
+    HANET_CLIENT_ID,
+    HANET_CLIENT_SECRET,
+    HANET_REFRESH_TOKEN,
+  } = process.env;
 
   try {
+    console.log("[tokenManager] Đang yêu cầu làm mới Access Token từ HANET...");
     const response = await axios.post(
-      apiUrl,
-      qs.stringify(requestData),
-      config
-    );
-    if (response.data && response.data.access_token) {
-      console.log("Làm mới Access Token thành công.");
-      const expiresIn = response.data.expires_in || 3600;
-      currentAccessToken = response.data.access_token;
-      tokenExpiresAt = Date.now() + expiresIn * 1000 - 60 * 1000;
-      if (
-        response.data.refresh_token &&
-        response.data.refresh_token !== HANET_REFRESH_TOKEN
-      ) {
-        console.warn("Nhận được Refresh Token mới từ HANET!");
+      HANET_TOKEN_URL,
+      qs.stringify({
+        grant_type: "refresh_token",
+        client_id: HANET_CLIENT_ID,
+        client_secret: HANET_CLIENT_SECRET,
+        refresh_token: HANET_REFRESH_TOKEN,
+      }),
+      {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 10000,
       }
+    );
 
-      return currentAccessToken;
-    } else {
-      console.error(
-        "Lỗi khi làm mới token, response không chứa access_token:",
-        response.data
-      );
-      throw new Error(
-        `Lỗi làm mới token từ HANET: ${
-          response.data?.returnMessage || "Phản hồi không hợp lệ"
-        }`
-      );
+    const { access_token, expires_in } = response.data;
+    if (!access_token) {
+      throw new Error("Không nhận được access token từ response");
     }
+
+    currentAccessToken = access_token;
+    tokenExpiresAt = Date.now() + (expires_in - 300) * 1000; // Refresh 5 minutes before expiry
+    console.log("[tokenManager] Làm mới Access Token thành công");
+    return access_token;
   } catch (error) {
-    console.error(
-      "Lỗi nghiêm trọng khi gọi API làm mới token:",
-      error.response?.data || error.message
-    );
-    currentAccessToken = null;
-    tokenExpiresAt = null;
-    throw new Error(
-      `Không thể làm mới Access Token: ${
-        error.response?.data?.returnMessage || error.message
-      }`
-    );
+    console.error("[tokenManager] Lỗi làm mới token:", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    throw error;
   }
 }
+
 async function getValidHanetToken() {
-  const now = Date.now();
-  if (currentAccessToken && tokenExpiresAt && now < tokenExpiresAt - 10000) {
-    console.log("Sử dụng Access Token từ bộ nhớ.");
+  try {
+    if (!currentAccessToken || !tokenExpiresAt || Date.now() >= tokenExpiresAt) {
+      console.log('[tokenManager] Access Token trong bộ nhớ không hợp lệ hoặc hết hạn, đang làm mới...');
+      return await refreshAccessToken();
+    }
     return currentAccessToken;
+  } catch (error) {
+    console.error("[tokenManager] Lỗi lấy token hợp lệ:", error.message);
+    throw error;
   }
-  console.log(
-    "Access Token trong bộ nhớ không hợp lệ hoặc hết hạn, đang làm mới..."
-  );
-  return await refreshAccessToken();
 }
+
+// Kiểm tra biến môi trường khi module được load
+checkEnvironmentVariables();
 
 module.exports = {
   getValidHanetToken,
+  refreshAccessToken
 };
