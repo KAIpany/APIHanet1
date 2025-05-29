@@ -70,13 +70,24 @@ app.get("/api/places", async (req, res) => {
   try {
     const token = await tokenManager.getValidHanetToken();
     if (!token) {
-      throw new Error('Failed to obtain valid access token');
+      return res.status(401).json({
+        success: false,
+        error: "Authentication failed",
+        message: "Failed to obtain valid access token"
+      });
     }
     const places = await getAllPlace.getData();
-    res.json(places);
+    res.json({
+      success: true,
+      data: places
+    });
   } catch (error) {
     console.error("Error getting places:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      success: false,
+      error: "Internal server error",
+      message: error.message
+    });
   }
 });
 
