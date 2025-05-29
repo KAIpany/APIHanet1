@@ -35,6 +35,12 @@ const checkAuthStatus = async (forceCheck = false) => {
       }
       
       return result.data;
+    } else if (result.success === false) {
+      // Nếu server trả về lỗi, trả về trạng thái unauthenticated
+      return {
+        status: 'unauthenticated',
+        message: result.message || 'Không xác thực được'
+      };
     } else {
       throw new Error('Kết quả kiểm tra xác thực không hợp lệ');
     }
