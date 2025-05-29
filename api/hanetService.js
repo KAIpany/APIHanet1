@@ -38,15 +38,10 @@ function filterUniqueCheckinsPerPersonDay(data) {
 }
 
 require("dotenv").config();
-const axios = require("axios");
-const qs = require("qs");
+const fetch = require('node-fetch');
 const tokenManager = require("./tokenManager");
-const { getAllPlace } = require("./getPlaceId");
-const HANET_API_BASE_URL = process.env.HANET_API_BASE_URL;
 
-if (!HANET_API_BASE_URL) {
-  console.error("Lỗi: Biến môi trường HANET_API_BASE_URL chưa được thiết lập.");
-}
+const HANET_API_BASE_URL = process.env.HANET_API_BASE_URL || "https://partner.hanet.ai";
 
 async function getPeopleListByPlace() {
   let places = [];
