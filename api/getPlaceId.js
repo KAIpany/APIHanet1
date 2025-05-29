@@ -28,9 +28,15 @@ const getAllPlace = async function () {
 
   try {
     const response = await axios.post(apiUrl, requestData, config);
-    console.log(response.data.data);
+    const data = response.data;
 
-    return response.data.data;
+    // Validate and transform response
+    if (!data || !data.data) {
+      throw new Error("Không nhận được dữ liệu từ HANET API");
+    }
+
+    // Return the places array
+    return Array.isArray(data.data) ? data.data : [data.data];
   } catch (error) {
     console.error("Lỗi khi gọi API HANET:", error.message);
     throw new Error(`Lỗi API HANET: ${error.message}`);
