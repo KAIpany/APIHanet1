@@ -1,5 +1,5 @@
 // apiService.js - Xử lý các yêu cầu API và tự động làm mới xác thực khi cần
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 // Theo dõi thời gian kiểm tra xác thực cuối cùng
 let lastAuthCheckTime = 0;
@@ -22,7 +22,17 @@ const checkAuthStatus = async (forceCheck = false) => {
     console.log('[apiService] Kiểm tra trạng thái xác thực');
     lastAuthCheckTime = now;
     
-    const response = await fetch(`${API_URL}/api/oauth/status`);
+    const response = await fetch(`${API_URL}/api/oauth/status`, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
     const result = await response.json();
     
     if (result.success && result.data) {
