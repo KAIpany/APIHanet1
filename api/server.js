@@ -179,13 +179,14 @@ app.post("/api/checkins", async (req, res) => {
 // Endpoint để cập nhật cấu hình OAuth
 app.post("/api/oauth/config", (req, res) => {
   try {
-    const { clientId, clientSecret, baseUrl, tokenUrl } = req.body;
+    const { clientId, clientSecret, baseUrl, tokenUrl, refreshToken } = req.body;
 
     const config = {
       clientId: clientId || process.env.HANET_CLIENT_ID,
       clientSecret: clientSecret || process.env.HANET_CLIENT_SECRET,
       baseUrl: baseUrl || "https://partner.hanet.ai",
-      tokenUrl: tokenUrl || "https://oauth.hanet.com/token"
+      tokenUrl: tokenUrl || "https://oauth.hanet.com/token",
+      refreshToken: refreshToken || process.env.HANET_REFRESH_TOKEN
     };
     
     tokenManager.setDynamicConfig(config);
@@ -198,7 +199,7 @@ app.post("/api/oauth/config", (req, res) => {
     console.error("Lỗi khi cập nhật cấu hình OAuth:", error);
     return res.status(500).json({
       success: false,
-      message: "Lỗi khi cập nhật cấu hình: " + error.message,
+      message: error.message
     });
   }
 });
