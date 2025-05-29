@@ -245,44 +245,29 @@ const OAuthConfig = () => {
   
   // Cập nhật cấu hình lên server
   const updateServerConfig = async (configData) => {
-    // Đảm bảo hàm trả về Promise để có thể xử lý then/catch
-    return new Promise(async (resolve, reject) => {
-      try {
-        // Thêm timeout để đảm bảo có đủ thời gian để cập nhật
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 giây timeout
-        
-        console.log('Gửi cấu hình lên server:', {
-          clientId: configData.clientId,
-          hasClientSecret: !!configData.clientSecret,
-          baseUrl: configData.baseUrl,
-          tokenUrl: configData.tokenUrl
-        });
-        
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/config`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(configData),
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        const result = await response.json();
-        if (result.success) {
-          console.log('Đã cập nhật cấu hình lên server thành công');
-          resolve(result);
-        } else {
-          console.error('Server trả về lỗi:', result.message);
-          reject(new Error(result.message || 'Lỗi không xác định từ server'));
-        }
-      } catch (error) {
-        console.error('Lỗi khi cập nhật cấu hình lên server:', error);
-        reject(error);
+    // Lấy refreshToken nếu có
+    const refreshToken = configData.token?.refresh_token || configData.refreshToken || '';
+    const configToSend = {
+      ...configData,
+      refreshToken
+    };
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(configToSend)
+      });
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.message || 'Không thể cập nhật cấu hình lên server');
       }
-    });
+      return true;
+    } catch (error) {
+      console.error('Lỗi khi cập nhật cấu hình lên server:', error);
+      throw error;
+    }
   };
 
   // Lưu cấu hình mới
