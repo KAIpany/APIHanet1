@@ -181,44 +181,34 @@ const apiService = {
   async getPlaces() {
     try {
       console.log('Fetching places from API...');
-      const response = await fetch(`${API_URL}/api/place`);
-      const data = await response.json();
-      
-      console.log('Places API Response:', data);
-      
-      // Kiểm tra response format
-      if (!data) {
-        console.error('Empty response from places API');
-        throw new Error('Không nhận được dữ liệu từ API');
+      const response = await fetch(`${API_URL}/api/places`, {
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
-      // Kiểm tra nếu có lỗi
-      if (data.success === false) {
-        console.error('API returned error:', data.message);
-        throw new Error(data.message || 'Lỗi khi lấy danh sách địa điểm');
+
+      const result = await response.json();
+      console.log('Places API Response:', result);
+
+      if (result.success && Array.isArray(result.data)) {
+        console.log(`Found ${result.data.length} places`);
+        return result.data;
       }
-      
-      // Kiểm tra và xử lý dữ liệu
-      if (data.success && Array.isArray(data.data)) {
-        console.log(`Found ${data.data.length} places`);
-        return data.data;
+
+      if (result.error) {
+        throw new Error(result.message || result.error);
       }
-      
-      if (data.success && data.data) {
-        console.log('Converting places data to array');
-        return Array.isArray(data.data) ? data.data : [data.data];
-      }
-      
-      // Nếu response là array trực tiếp
-      if (Array.isArray(data)) {
-        console.log(`Found ${data.length} places (direct array)`);
-        return data;
-      }
-      
-      console.error('Invalid places data format:', data);
+
       throw new Error('Dữ liệu địa điểm trả về không hợp lệ');
     } catch (error) {
       console.error('Error fetching places:', error);
+      if (error.message.includes('Failed to fetch')) {
+        throw new Error('Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng.');
+      }
       throw new Error('Lỗi khi lấy danh sách địa điểm: ' + error.message);
     }
   },
