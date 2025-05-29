@@ -15,22 +15,19 @@ const OAuthConfig = () => {
   const [config, setConfig] = useState({
     clientId: '',
     clientSecret: '',
-    refreshToken: '',
     baseUrl: 'https://partner.hanet.ai',
-    tokenUrl: 'https://oauth.hanet.com/token',
-    appName: '',
-    redirectUri: '',
-    userInfoUrl: ''
+    tokenUrl: 'https://oauth.hanet.com/token'
   });
+
+  const [status, setStatus] = useState({
+    loading: false,
+    error: null,
+    authStatus: null
+  });
+
   const [configName, setConfigName] = useState('');
   const [savedConfigs, setSavedConfigs] = useState([]);
   const [activeConfig, setActiveConfig] = useState('');
-  const [status, setStatus] = useState({
-    loading: true,
-    message: 'Đang tải cấu hình...',
-    status: 'loading',
-    error: null
-  });
 
   // Lấy danh sách cấu hình và cấu hình đang active khi component mount
   useEffect(() => {
@@ -77,7 +74,6 @@ const OAuthConfig = () => {
             setConfig({
               clientId: parsedConfig.clientId || '',
               clientSecret: parsedConfig.clientSecret || '',
-              refreshToken: parsedConfig.refreshToken || '',
               baseUrl: parsedConfig.baseUrl || 'https://partner.hanet.ai',
               tokenUrl: parsedConfig.tokenUrl || 'https://oauth.hanet.com/token',
               appName: parsedConfig.appName || '',
@@ -129,7 +125,6 @@ const OAuthConfig = () => {
           // Ưu tiên giá trị từ localStorage, nếu không có mới lấy từ API
           clientId: savedConfig.clientId || result.data.clientId || '',
           clientSecret: savedConfig.clientSecret || '',
-          refreshToken: savedConfig.refreshToken || '',
           baseUrl: savedConfig.baseUrl || result.data.baseUrl || 'https://partner.hanet.ai',
           tokenUrl: savedConfig.tokenUrl || result.data.tokenUrl || 'https://oauth.hanet.com/token',
           appName: savedConfig.appName || result.data.appName || '',
@@ -245,7 +240,6 @@ const OAuthConfig = () => {
           setConfig({
             clientId: parsedConfig.clientId || '',
             clientSecret: parsedConfig.clientSecret || '',
-            refreshToken: parsedConfig.refreshToken || '',
             baseUrl: parsedConfig.baseUrl || 'https://partner.hanet.ai',
             tokenUrl: parsedConfig.tokenUrl || 'https://oauth.hanet.com/token',
             appName: parsedConfig.appName || '',
@@ -298,7 +292,6 @@ const OAuthConfig = () => {
         console.log('Gửi cấu hình lên server:', {
           clientId: configData.clientId,
           hasClientSecret: !!configData.clientSecret,
-          hasRefreshToken: !!configData.refreshToken,
           baseUrl: configData.baseUrl,
           tokenUrl: configData.tokenUrl
         });
@@ -332,36 +325,22 @@ const OAuthConfig = () => {
   // Lưu cấu hình mới
   const saveConfig = async () => {
     if (!configName.trim()) {
-      setStatus({
-        ...status,
-        status: 'error',
-        message: 'Vui lòng nhập tên cho cấu hình này',
-        error: 'Thiếu tên cấu hình'
-      });
+      setStatus({ ...status, error: 'Vui lòng nhập tên cấu hình' });
       return;
     }
-    
-    try {
-      setStatus({
-        ...status,
-        loading: true,
-        message: 'Đang lưu cấu hình...'
-      });
 
-      const configToSave = {
-        clientId: config.clientId, 
-        clientSecret: config.clientSecret,
-        refreshToken: config.refreshToken,
-        baseUrl: config.baseUrl,
-        tokenUrl: config.tokenUrl,
-        appName: config.appName || configName,
-        redirectUri: config.redirectUri,
-        userInfoUrl: config.userInfoUrl
+    setStatus({ ...status, loading: true, error: null });
+
+    try {
+      const configData = {
+        ...config,
+        appName: configName
       };
-      
-      // Lưu cấu hình với tên
-      localStorage.setItem(CONFIG_PREFIX + configName, JSON.stringify(configToSave));
-      
+
+      // Lưu vào localStorage
+      localStorage.setItem(CONFIG_PREFIX + configName, JSON.stringify(configData));
+      setActiveConfig(configName);
+
       // Cập nhật danh sách cấu hình
       let configsList = [];
       try {
@@ -372,55 +351,30 @@ const OAuthConfig = () => {
       } catch (error) {
         console.error('Lỗi khi đọc danh sách cấu hình:', error);
       }
-      
-      // Thêm vào danh sách nếu chưa có
+
       if (!configsList.includes(configName)) {
         configsList.push(configName);
         localStorage.setItem(CONFIGS_LIST_KEY, JSON.stringify(configsList));
         setSavedConfigs(configsList);
       }
-      
-      // Đặt làm cấu hình active
-      localStorage.setItem(ACTIVE_CONFIG_KEY, configName);
-      setActiveConfig(configName);
-      
-      console.log(`Đã lưu cấu hình '${configName}' vào localStorage:`, configToSave);
 
-      // Sau đó gửi lên server
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/oauth/config`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(configToSave)
+      // Cập nhật cấu hình lên server
+      await updateServerConfig({
+        ...configData,
+        clientSecret: configData.clientSecret || undefined
       });
 
-      const result = await response.json();
+      setStatus({ loading: false, error: null, authStatus: 'success' });
       
-      if (result.success) {
-        setStatus({
-          loading: false,
-          message: `Đã lưu cấu hình '${configName}' thành công`,
-          status: 'success',
-          error: null
-        });
-        
-        // Kiểm tra lại trạng thái xác thực
-        checkAuthStatus();
-      } else {
-        throw new Error(result.message || 'Không thể lưu cấu hình');
-      }
     } catch (error) {
-      console.error('Lỗi khi lưu cấu hình:', error);
       setStatus({
         loading: false,
-        message: 'Lỗi khi gửi cấu hình lên server, nhưng đã lưu cục bộ',
-        status: 'warning',
-        error: error.message
+        error: error.message || 'Có lỗi xảy ra khi lưu cấu hình',
+        authStatus: 'error'
       });
     }
   };
-  
+
   // Xóa cấu hình
   const deleteConfig = (name) => {
     if (!name) return;
@@ -456,7 +410,6 @@ const OAuthConfig = () => {
           setConfig({
             clientId: '',
             clientSecret: '',
-            refreshToken: '',
             baseUrl: 'https://partner.hanet.ai',
             tokenUrl: 'https://oauth.hanet.com/token',
             appName: '',
@@ -570,36 +523,7 @@ const OAuthConfig = () => {
       
       {status.authStatus && (
         <div className={`auth-status ${status.authStatus}`}>
-          <p>Trạng thái xác thực: {status.authMessage}</p>
-        </div>
-      )}
-      
-      {/* Danh sách cấu hình đã lưu */}
-      {savedConfigs.length > 0 && (
-        <div className="saved-configs">
-          <h3>Cấu hình đã lưu</h3>
-          <div className="configs-list">
-            {savedConfigs.map(name => (
-              <div key={name} className={`config-item ${activeConfig === name ? 'active' : ''}`}>
-                <span className="config-name">{name}</span>
-                <div className="config-actions">
-                  <button 
-                    onClick={() => loadConfigByName(name)}
-                    className="load-button"
-                    disabled={activeConfig === name}
-                  >
-                    {activeConfig === name ? 'Đang dùng' : 'Chuyển đổi'}
-                  </button>
-                  <button 
-                    onClick={() => deleteConfig(name)}
-                    className="delete-button"
-                  >
-                    Xóa
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+          <p>{status.authStatus === 'success' ? 'Cấu hình đã được lưu thành công!' : 'Có lỗi xảy ra!'}</p>
         </div>
       )}
       
@@ -609,27 +533,12 @@ const OAuthConfig = () => {
           <input
             type="text"
             id="configName"
-            name="configName"
             value={configName}
             onChange={(e) => setConfigName(e.target.value)}
             placeholder="Nhập tên cho cấu hình này"
           />
-          <small>* Tên này dùng để lưu và chọn cấu hình</small>
         </div>
-        
-        <div className="form-group">
-          <label htmlFor="appName">Tên ứng dụng:</label>
-          <input
-            type="text"
-            id="appName"
-            name="appName"
-            value={config.appName}
-            onChange={handleChange}
-            placeholder="Nhập tên ứng dụng của bạn"
-          />
-          <small>* Tên này sẽ được hiển thị khi chọn tài khoản</small>
-        </div>
-        
+
         <div className="form-group">
           <label htmlFor="clientId">Client ID:</label>
           <input
@@ -641,7 +550,7 @@ const OAuthConfig = () => {
             placeholder="Nhập Client ID của bạn"
           />
         </div>
-        
+
         <div className="form-group">
           <label htmlFor="clientSecret">Client Secret:</label>
           <input
@@ -654,19 +563,7 @@ const OAuthConfig = () => {
           />
           <small>* Client Secret sẽ không được hiển thị sau khi lưu</small>
         </div>
-        
-        <div className="form-group">
-          <label htmlFor="refreshToken">Refresh Token:</label>
-          <input
-            type="password"
-            id="refreshToken"
-            name="refreshToken"
-            value={config.refreshToken}
-            onChange={handleChange}
-            placeholder="Nhập Refresh Token nếu có"
-          />
-        </div>
-        
+
         <div className="form-group">
           <label htmlFor="baseUrl">API Base URL:</label>
           <input
@@ -678,7 +575,7 @@ const OAuthConfig = () => {
             placeholder="URL cơ sở của API"
           />
         </div>
-        
+
         <div className="form-group">
           <label htmlFor="tokenUrl">Token URL:</label>
           <input
@@ -691,7 +588,7 @@ const OAuthConfig = () => {
           />
           <small>* Thông thường là https://oauth.hanet.com/token</small>
         </div>
-        
+
         <div className="button-group">
           <button 
             className="save-button"
@@ -699,14 +596,6 @@ const OAuthConfig = () => {
             disabled={status.loading || !configName.trim()}
           >
             {status.loading ? 'Đang lưu...' : 'Lưu cấu hình mới'}
-          </button>
-          
-          <button 
-            className="oauth-button"
-            onClick={initiateOAuth}
-            disabled={!config.clientId || status.loading}
-          >
-            Đăng nhập với Hanet
           </button>
         </div>
       </div>
@@ -716,12 +605,11 @@ const OAuthConfig = () => {
         <ol>
           <li>Nhập <strong>Client ID</strong> và <strong>Client Secret</strong> từ tài khoản Hanet của bạn</li>
           <li>Nhấn <strong>Lưu cấu hình</strong> để lưu thông tin</li>
-          <li>Nhấn <strong>Đăng nhập với Hanet</strong> để xác thực</li>
-          <li>Sau khi xác thực, hệ thống sẽ tự động lưu trữ token</li>
+          <li>Hệ thống sẽ sử dụng Access Token đã được cấu hình sẵn</li>
         </ol>
       </div>
     </div>
   );
 };
 
-export default OAuthConfig; 
+export default OAuthConfig;
